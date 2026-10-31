@@ -32,7 +32,13 @@ public final class RoadGraph extends Graph<Intersection, Road> {
     public List<Road> addTwoWayRoad(String baseId, Intersection a, Intersection b, double speedLimit, int lanes) {
         Objects.requireNonNull(a, "a");
         Objects.requireNonNull(b, "b");
-        double length = a.distanceTo(b);
+        return addTwoWayRoad(baseId, a, b, a.distanceTo(b), speedLimit, lanes);
+    }
+
+    public List<Road> addTwoWayRoad(String baseId, Intersection a, Intersection b, double length, double speedLimit,
+            int lanes) {
+        Objects.requireNonNull(a, "a");
+        Objects.requireNonNull(b, "b");
         var forward = new Road(baseId + FORWARD_SUFFIX, a, b, length, speedLimit, lanes);
         var backward = new Road(baseId + BACKWARD_SUFFIX, b, a, length, speedLimit, lanes);
         // Validar ambos extremos antes de insertar para no dejar una calle de un solo sentido.

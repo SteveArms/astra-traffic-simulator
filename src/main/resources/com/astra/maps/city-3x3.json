@@ -1,0 +1,28 @@
+{
+  "name": "City 3x3",
+  "intersections": [
+    {"id": "I00", "x": 150, "y": 100},
+    {"id": "I01", "x": 350, "y": 100},
+    {"id": "I02", "x": 550, "y": 100},
+    {"id": "I10", "x": 150, "y": 300},
+    {"id": "I11", "x": 350, "y": 300},
+    {"id": "I12", "x": 550, "y": 300},
+    {"id": "I20", "x": 150, "y": 500},
+    {"id": "I21", "x": 350, "y": 500},
+    {"id": "I22", "x": 550, "y": 500}
+  ],
+  "roads": [
+    {"id": "R1", "from": "I00", "to": "I01", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R2", "from": "I01", "to": "I02", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R3", "from": "I10", "to": "I11", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R4", "from": "I11", "to": "I12", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R5", "from": "I20", "to": "I21", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R6", "from": "I21", "to": "I22", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R7", "from": "I00", "to": "I10", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R8", "from": "I01", "to": "I11", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R9", "from": "I02", "to": "I12", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R10", "from": "I10", "to": "I20", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R11", "from": "I11", "to": "I21", "speedLimit": 14, "lanes": 1, "twoWay": true},
+    {"id": "R12", "from": "I12", "to": "I22", "speedLimit": 14, "lanes": 1, "twoWay": true}
+  ]
+}

@@ -6,4 +6,6 @@ module com.astra {
     requires com.google.gson;
 
     exports com.astra.app;
+
+    opens com.astra.util to com.google.gson;
 }
