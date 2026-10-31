@@ -16,13 +16,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Semáforos de la ciudad, solo donde entran vías de los dos ejes. Las consultas sirven desde cualquier hilo. */
+/** Semáforos donde entran 3+ vías de los dos ejes (no en esquinas en L). Consultas desde cualquier hilo. */
 public final class LightController {
 
     public static final String THREAD_PREFIX = "astra-lights-";
 
     private static final int POOL_SIZE = 2;
     private static final long STOP_TIMEOUT_MILLIS = 1_000;
+    private static final int MIN_INCOMING_FOR_LIGHT = 3;
 
     private final Map<Intersection, TrafficLight> lights;
     private volatile ScheduledExecutorService executor;
@@ -31,15 +32,19 @@ public final class LightController {
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(timings, "timings");
         Map<Intersection, Set<Axis>> incomingAxes = new HashMap<>();
+        Map<Intersection, Integer> incomingCount = new HashMap<>();
         for (Road road : graph.edges()) {
             incomingAxes.computeIfAbsent(road.to(), i -> EnumSet.noneOf(Axis.class)).add(Axis.of(road));
+            incomingCount.merge(road.to(), 1, Integer::sum);
         }
 
         List<Double> columns = sortedUnique(graph.vertices().stream().map(Intersection::x).toList());
         List<Double> rows = sortedUnique(graph.vertices().stream().map(Intersection::y).toList());
         Map<Intersection, TrafficLight> created = new HashMap<>();
         for (Intersection intersection : graph.vertices()) {
-            if (incomingAxes.getOrDefault(intersection, Set.of()).size() == Axis.values().length) {
+            boolean bothAxes = incomingAxes.getOrDefault(intersection, Set.of()).size() == Axis.values().length;
+            // En una esquina en L (2 vías) los flujos no se cruzan: basta la zona.
+            if (bothAxes && incomingCount.getOrDefault(intersection, 0) >= MIN_INCOMING_FOR_LIGHT) {
                 // Damero: vecinas con ejes opuestos.
                 int parity = columns.indexOf(intersection.x()) + rows.indexOf(intersection.y());
                 Axis first = parity % 2 == 0 ? Axis.NS : Axis.EW;

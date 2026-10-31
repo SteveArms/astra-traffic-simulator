@@ -8,7 +8,11 @@ import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
 import com.astra.traffic.LightColor;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
 import javafx.animation.AnimationTimer;
 import javafx.geometry.VPos;
@@ -73,6 +77,7 @@ public final class CityRenderer extends StackPane {
 
     private final RoadGraph graph;
     private final Supplier<WorldSnapshot> snapshotSource;
+    private final Map<String, Set<Side>> approaches;
     private final Canvas staticLayer = new Canvas();
     private final Canvas dynamicLayer = new Canvas();
     private final AnimationTimer timer;
@@ -86,6 +91,7 @@ public final class CityRenderer extends StackPane {
     public CityRenderer(RoadGraph graph, Supplier<WorldSnapshot> snapshotSource) {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
+        this.approaches = approachesOf(graph);
 
         // Si no, el StackPane no puede encogerse por debajo de los Canvas.
         setMinSize(0, 0);
@@ -217,11 +223,44 @@ public final class CityRenderer extends StackPane {
         }
     }
 
+    // Una luz por cada lado del que llega una calle.
     private void drawLight(GraphicsContext gc, LightView light) {
-        drawLamp(gc, light.x(), light.y() - LIGHT_OFFSET, light.ns());
-        drawLamp(gc, light.x(), light.y() + LIGHT_OFFSET, light.ns());
-        drawLamp(gc, light.x() - LIGHT_OFFSET, light.y(), light.ew());
-        drawLamp(gc, light.x() + LIGHT_OFFSET, light.y(), light.ew());
+        for (Side side : approaches.getOrDefault(light.intersectionId(), Set.of())) {
+            LightColor color = side.vertical ? light.ns() : light.ew();
+            drawLamp(gc, light.x() + side.dx * LIGHT_OFFSET, light.y() + side.dy * LIGHT_OFFSET, color);
+        }
+    }
+
+    private static Map<String, Set<Side>> approachesOf(RoadGraph graph) {
+        Map<String, Set<Side>> sides = new HashMap<>();
+        for (Road road : graph.edges()) {
+            sides.computeIfAbsent(road.to().id(), id -> EnumSet.noneOf(Side.class)).add(Side.of(road));
+        }
+        return Map.copyOf(sides);
+    }
+
+    private enum Side {
+        NORTH(0, -1, true), SOUTH(0, 1, true), WEST(-1, 0, false), EAST(1, 0, false);
+
+        private final int dx;
+        private final int dy;
+        private final boolean vertical;
+
+        Side(int dx, int dy, boolean vertical) {
+            this.dx = dx;
+            this.dy = dy;
+            this.vertical = vertical;
+        }
+
+        // Lado de la intersección destino por el que entra la vía.
+        static Side of(Road incoming) {
+            double dx = incoming.from().x() - incoming.to().x();
+            double dy = incoming.from().y() - incoming.to().y();
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                return dx < 0 ? WEST : EAST;
+            }
+            return dy < 0 ? NORTH : SOUTH;
+        }
     }
 
     private void drawLamp(GraphicsContext gc, double x, double y, LightColor color) {
