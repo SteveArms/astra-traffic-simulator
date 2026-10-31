@@ -27,6 +27,10 @@ public final class SimConfig {
     static final String SMART_MAX_EXTENSION_SECONDS = "smart.maxExtensionSeconds";
     static final String SPAWN_INTERVAL_MILLIS = "spawn.intervalMillis";
     static final String VEHICLE_MAX_COUNT = "vehicle.maxCount";
+    static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
+    static final String CAR_ACCELERATION = "vehicle.car.acceleration";
+    static final String DEMO_CAR_COUNT = "demo.carCount";
+    static final String DEMO_SEED = "demo.seed";
     static final String MAP_FILE = "map.file";
     static final String LOG_FILE = "log.file";
 
@@ -39,6 +43,10 @@ public final class SimConfig {
     private static final long DEFAULT_SMART_MAX_EXTENSION_SECONDS = 6;
     private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 1500;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
+    private static final double DEFAULT_CAR_MAX_SPEED = 14;
+    private static final double DEFAULT_CAR_ACCELERATION = 3;
+    private static final int DEFAULT_DEMO_CAR_COUNT = 4;
+    private static final long DEFAULT_DEMO_SEED = 42;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
 
@@ -50,6 +58,10 @@ public final class SimConfig {
     private final Duration smartMaxExtensionSeconds;
     private final Duration spawnIntervalMillis;
     private final int vehicleMaxCount;
+    private final double carMaxSpeed;
+    private final double carAcceleration;
+    private final int demoCarCount;
+    private final long demoSeed;
     private final String mapFile;
     private final String logFile;
 
@@ -64,6 +76,10 @@ public final class SimConfig {
         spawnIntervalMillis = Duration.ofMillis(
                 positiveLong(p, SPAWN_INTERVAL_MILLIS, DEFAULT_SPAWN_INTERVAL_MILLIS));
         vehicleMaxCount = positiveInt(p, VEHICLE_MAX_COUNT, DEFAULT_VEHICLE_MAX_COUNT);
+        carMaxSpeed = positiveDouble(p, CAR_MAX_SPEED, DEFAULT_CAR_MAX_SPEED);
+        carAcceleration = positiveDouble(p, CAR_ACCELERATION, DEFAULT_CAR_ACCELERATION);
+        demoCarCount = positiveInt(p, DEMO_CAR_COUNT, DEFAULT_DEMO_CAR_COUNT);
+        demoSeed = positiveLong(p, DEMO_SEED, DEFAULT_DEMO_SEED);
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
     }
@@ -120,12 +136,45 @@ public final class SimConfig {
         return vehicleMaxCount;
     }
 
+    public double carMaxSpeed() {
+        return carMaxSpeed;
+    }
+
+    public double carAcceleration() {
+        return carAcceleration;
+    }
+
+    public long demoSeed() {
+        return demoSeed;
+    }
+
+    public int demoCarCount() {
+        return demoCarCount;
+    }
+
     public String mapFile() {
         return mapFile;
     }
 
     public String logFile() {
         return logFile;
+    }
+
+    private static double positiveDouble(Properties p, String key, double defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        double value;
+        try {
+            value = Double.parseDouble(raw.strip());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw + "' is not a number", e);
+        }
+        if (!(value > 0) || !Double.isFinite(value)) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " must be > 0");
+        }
+        return value;
     }
 
     private static long positiveLong(Properties p, String key, long defaultValue) {

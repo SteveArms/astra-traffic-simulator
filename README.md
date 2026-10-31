@@ -4,9 +4,9 @@
 tráfico urbano con calles, semáforos inteligentes y vehículos con distintos comportamientos.
 Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
 
-- El motor de simulación corre en su propio hilo con paso fijo. *(En desarrollo)*
+- El motor de simulación corre en su propio hilo con paso fijo.
 - Los semáforos cambian de estado de forma asíncrona. *(En desarrollo)*
-- La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo. *(En desarrollo)*
+- La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo.
 - Los vehículos cruzan las intersecciones con Reloj de Lamport y Ricart‑Agrawala. *(En desarrollo)*
 
 ## Requisitos
@@ -36,16 +36,16 @@ Usa `mvn javafx:run` para abrir la aplicación; `java -jar` falla porque no encu
 ```
 src/main/java/com/astra/
 ├── app/          AstraApp: punto de entrada JavaFX
-├── core/         SimConfig; motor, WorldState y WorldSnapshot (En desarrollo)
+├── core/         SimConfig, SimulationEngine, WorldState, WorldSnapshot, DemoScenario
 ├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph
 │   └── algo/     Dijkstra; A* (En desarrollo)
-├── model/        Vehículos y carriles (En desarrollo)
+├── model/        Vehicle, Car, VehicleKind, VehicleView; Bus, Ambulance y carriles (En desarrollo)
 ├── traffic/      Semáforos con patrón State (En desarrollo)
 ├── routing/      Estrategias de ruta (En desarrollo)
 ├── command/      Comandos y CommandBus (En desarrollo)
 ├── events/       Eventos y su cola de prioridad (En desarrollo)
 ├── distributed/  Lamport y Ricart‑Agrawala (En desarrollo)
-├── view/         Renderizado y paneles (En desarrollo)
+├── view/         CityRenderer; ControlPanel y StatsPanel (En desarrollo)
 └── util/         MapLoader, MapFormatException; SimLogger (En desarrollo)
 
 src/main/resources/com/astra/

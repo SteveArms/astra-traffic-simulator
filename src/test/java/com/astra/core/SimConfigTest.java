@@ -24,6 +24,10 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
         assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
+        assertEquals(14, config.carMaxSpeed());
+        assertEquals(3, config.carAcceleration());
+        assertEquals(4, config.demoCarCount());
+        assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }
@@ -40,6 +44,10 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
         assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
+        assertEquals(14, config.carMaxSpeed());
+        assertEquals(3, config.carAcceleration());
+        assertEquals(4, config.demoCarCount());
+        assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }
@@ -81,5 +89,23 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(SimConfig.MAP_FILE), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abc", "0", "-2.5", "NaN", "Infinity"})
+    void invalidDecimalValueThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.CAR_MAX_SPEED, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.CAR_MAX_SPEED), e.getMessage());
+    }
+
+    @Test
+    void decimalValuesAreAccepted() {
+        var props = new Properties();
+        props.setProperty(SimConfig.CAR_ACCELERATION, "2.5");
+
+        assertEquals(2.5, SimConfig.from(props).carAcceleration());
     }
 }

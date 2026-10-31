@@ -66,7 +66,7 @@ module com.astra {
 ## Estado del plan (actualizar al avanzar)
 
 - [x] Día 1 — Setup Maven/JavaFX 21, `Graph<V,E>`, Dijkstra, MapLoader
-- [ ] Día 2 — `SimulationEngine`, `WorldSnapshot`, `CityRenderer`
+- [x] Día 2 — `SimulationEngine`, `WorldSnapshot`, `CityRenderer`
 - [ ] Día 3 — Semáforos (State) asíncronos + `Semaphore` en intersecciones
 - [ ] Día 4 — Estrategias de ruta, Bus/Ambulance, spawner + `Phaser`
 - [ ] Día 5 — `CommandBus`, ControlPanel, StatsPanel, SmartAdaptiveState
