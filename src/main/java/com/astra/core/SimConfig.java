@@ -11,19 +11,12 @@ import java.util.Objects;
 import java.util.Properties;
 
 /**
- * Configuración de la simulación leída de {@code config.properties}.
- *
- * <p>Si falta una clave se usa su valor por defecto; si un valor numérico no es un entero
- * positivo, o un texto está vacío, se lanza {@link IllegalArgumentException} con el nombre
- * de la clave.
- *
- * <p>Es <b>thread-safe</b> por ser inmutable: todos sus campos son {@code final} y de tipos
- * inmutables, así que una instancia puede compartirse sin sincronización entre el FX Thread,
- * {@code astra-engine}, los workers y {@code astra-lights}.
+ * Configuración leída de {@code config.properties}. Claves ausentes usan su valor por defecto;
+ * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
+ * Thread-safe por ser inmutable.
  */
 public final class SimConfig {
 
-    /** Ruta del archivo de configuración dentro del classpath. */
     public static final String RESOURCE = "/com/astra/config.properties";
 
     static final String TICK_MILLIS = "engine.tickMillis";
@@ -37,7 +30,7 @@ public final class SimConfig {
     static final String MAP_FILE = "map.file";
     static final String LOG_FILE = "log.file";
 
-    // Valores por defecto: deben coincidir con config.properties y con AGENTS.md (sección 8).
+    // Deben coincidir con config.properties.
     private static final long DEFAULT_TICK_MILLIS = 50;
     private static final long DEFAULT_GREEN_SECONDS = 8;
     private static final long DEFAULT_YELLOW_SECONDS = 2;
@@ -75,13 +68,6 @@ public final class SimConfig {
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
     }
 
-    /**
-     * Carga la configuración desde {@value #RESOURCE} en el classpath (UTF-8).
-     *
-     * @throws IllegalStateException    si el recurso no existe
-     * @throws UncheckedIOException     si falla la lectura
-     * @throws IllegalArgumentException si algún valor es inválido
-     */
     public static SimConfig load() {
         try (InputStream in = SimConfig.class.getResourceAsStream(RESOURCE)) {
             if (in == null) {
@@ -97,62 +83,47 @@ public final class SimConfig {
         }
     }
 
-    /**
-     * Construye la configuración a partir de un {@link Properties} ya cargado (útil en tests).
-     *
-     * @throws IllegalArgumentException si algún valor es inválido
-     */
     public static SimConfig from(Properties p) {
         Objects.requireNonNull(p, "properties");
         return new SimConfig(p);
     }
 
-    /** Duración de un tick del motor ({@code engine.tickMillis}). */
     public Duration tickMillis() {
         return tickMillis;
     }
 
-    /** Duración de la luz verde ({@code lights.greenSeconds}). */
     public Duration greenSeconds() {
         return greenSeconds;
     }
 
-    /** Duración de la luz amarilla ({@code lights.yellowSeconds}). */
     public Duration yellowSeconds() {
         return yellowSeconds;
     }
 
-    /** Duración de la luz roja ({@code lights.redSeconds}). */
     public Duration redSeconds() {
         return redSeconds;
     }
 
-    /** Vehículos en cola a partir de los cuales el semáforo inteligente extiende el verde. */
     public int smartQueueThreshold() {
         return smartQueueThreshold;
     }
 
-    /** Extensión máxima del verde en el semáforo inteligente ({@code smart.maxExtensionSeconds}). */
     public Duration smartMaxExtensionSeconds() {
         return smartMaxExtensionSeconds;
     }
 
-    /** Intervalo entre apariciones de vehículos ({@code spawn.intervalMillis}). */
     public Duration spawnIntervalMillis() {
         return spawnIntervalMillis;
     }
 
-    /** Número máximo de vehículos simultáneos ({@code vehicle.maxCount}). */
     public int vehicleMaxCount() {
         return vehicleMaxCount;
     }
 
-    /** Ruta del mapa, relativa a {@code /com/astra/} en el classpath ({@code map.file}). */
     public String mapFile() {
         return mapFile;
     }
 
-    /** Ruta del archivo de log en disco ({@code log.file}). */
     public String logFile() {
         return logFile;
     }

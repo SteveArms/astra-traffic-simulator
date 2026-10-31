@@ -6,18 +6,12 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
-/**
- * Punto de entrada JavaFX de ASTRA.
- */
 public final class AstraApp extends Application {
 
     private static final String TITLE = "ASTRA — Traffic Simulator";
     private static final double WINDOW_WIDTH = 1100;
     private static final double WINDOW_HEIGHT = 700;
 
-    /**
-     * @implNote Called from the JavaFX Application Thread.
-     */
     @Override
     public void start(Stage stage) {
         var root = new BorderPane();
@@ -28,13 +22,9 @@ public final class AstraApp extends Application {
         stage.show();
     }
 
-    /**
-     * @implNote Called from the JavaFX Application Thread when the application exits.
-     */
     @Override
     public void stop() {
-        // TODO: detener SimulationEngine y hacer shutdownNow() + awaitTermination() de todos los executors
-        //       (astra-engine, astra-worker-N, astra-lights-N).
+        // TODO: detener SimulationEngine y hacer shutdownNow() + awaitTermination() de los executors.
     }
 
     public static void main(String[] args) {
