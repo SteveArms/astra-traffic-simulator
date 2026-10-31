@@ -72,6 +72,11 @@
                 <version>${javafx.maven.plugin.version}</version>
                 <configuration>
                     <mainClass>${main.class}</mainClass>
+                    <!-- mvn javafx:jlink: runtime mínimo con ASTRA, JavaFX y Gson para jpackage -->
+                    <jlinkImageName>astra-runtime</jlinkImageName>
+                    <stripDebug>true</stripDebug>
+                    <noHeaderFiles>true</noHeaderFiles>
+                    <noManPages>true</noManPages>
                 </configuration>
             </plugin>
         </plugins>

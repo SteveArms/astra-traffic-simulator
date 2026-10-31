@@ -32,6 +32,30 @@ mvn -Dtest=DijkstraTest test   # ejecutar un solo test
 
 Usa `mvn javafx:run` para abrir la aplicación; `java -jar` falla porque no encuentra JavaFX.
 
+## Ejecutable para Windows
+
+Puedes generar `ASTRA.exe`, que se abre con doble clic, sin consola y sin tener Java ni Maven
+instalados: lleva dentro su propio runtime con JavaFX y Gson.
+
+La forma más simple es hacer doble clic en **`build-exe.bat`**, en la raíz del repositorio
+(requiere JDK 21+ y Maven en el PATH). Hace lo mismo que estos comandos:
+
+```bat
+mvn clean javafx:jlink
+jpackage --type app-image --name ASTRA --app-version 0.1.0 ^
+  --runtime-image target\astra-runtime ^
+  --module com.astra/com.astra.app.AstraApp ^
+  --dest target\dist
+```
+
+1. `javafx:jlink` crea en `target\astra-runtime` un Java mínimo con ASTRA y sus dependencias.
+2. `jpackage` (incluido en el JDK) lo convierte en la carpeta `target\dist\ASTRA\`.
+3. Abre `target\dist\ASTRA\ASTRA.exe`.
+
+Para llevarlo a otra PC, copia la carpeta `ASTRA\` completa (unos 90 MB); el `.exe` solo no
+funciona. Después de cambiar el código, vuelve a ejecutar `build-exe.bat` con ASTRA cerrado. La
+carpeta queda en `target\`, así que Git la ignora.
+
 ## Estructura
 
 ```
