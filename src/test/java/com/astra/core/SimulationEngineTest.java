@@ -10,6 +10,7 @@ import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.Car;
 import com.astra.model.Vehicle;
+import com.astra.traffic.LightController;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -24,6 +25,7 @@ class SimulationEngineTest {
     private static final double DELTA = 1e-9;
     private static final double MAX_SPEED = 14;
     private static final double ACCELERATION = 3;
+    private static final double DECELERATION = 6;
 
     private Road longRoad;
     private Road shortRoad;
@@ -41,8 +43,9 @@ class SimulationEngineTest {
         shortRoad = new Road("BC", b, c, 1, 20, 1);
         graph.addEdge(longRoad);
         graph.addEdge(shortRoad);
-        world = new WorldState(graph);
-        engine = new SimulationEngine(SimConfig.from(new Properties()), world);
+        var cfg = SimConfig.from(new Properties());
+        world = new WorldState(graph, cfg, new LightController(graph, cfg), new IntersectionZones(graph, cfg));
+        engine = new SimulationEngine(cfg, world);
     }
 
     @AfterEach
@@ -52,7 +55,7 @@ class SimulationEngineTest {
 
     @Test
     void stepAdvancesTickAndMovesVehicle() {
-        Vehicle car = new Car(List.of(longRoad), MAX_SPEED, ACCELERATION);
+        Vehicle car = new Car(List.of(longRoad), MAX_SPEED, ACCELERATION, DECELERATION);
         world.addVehicle(car);
         int steps = 20;
 
@@ -98,8 +101,8 @@ class SimulationEngineTest {
 
     @Test
     void finishedVehicleIsRemovedUnlessHookAssignsNewRoute() {
-        Vehicle leaving = new Car(List.of(shortRoad), MAX_SPEED, 1_000);
-        Vehicle looping = new Car(List.of(shortRoad), MAX_SPEED, 1_000);
+        Vehicle leaving = new Car(List.of(shortRoad), MAX_SPEED, 1_000, DECELERATION);
+        Vehicle looping = new Car(List.of(shortRoad), MAX_SPEED, 1_000, DECELERATION);
         List<Vehicle> finished = new ArrayList<>();
         world.setOnVehicleFinished(vehicle -> {
             finished.add(vehicle);
@@ -110,7 +113,8 @@ class SimulationEngineTest {
         world.addVehicle(leaving);
         world.addVehicle(looping);
 
-        for (int i = 0; i < 10; i++) {
+        // Con minGap, looping espera a que leaving salga de la vía.
+        for (int i = 0; i < 100; i++) {
             engine.step();
         }
 
@@ -119,7 +123,7 @@ class SimulationEngineTest {
         assertEquals(looping.id(), engine.latestSnapshot().vehicles().get(0).id());
     }
 
-    // El hilo puede tardar unos milisegundos en morir después de awaitTermination.
+    // El hilo tarda unos ms en morir tras awaitTermination.
     private static boolean engineThreadGone() throws InterruptedException {
         for (int i = 0; i < 100; i++) {
             boolean alive = Thread.getAllStackTraces().keySet().stream()

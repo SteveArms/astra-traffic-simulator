@@ -132,12 +132,17 @@ Reglas:
 ## 6. Patrones y genéricos (contratos)
 
 ```java
-// State
+// State: un semáforo por intersección que alterna dos ejes (NS y EW).
+// Ciclo: GreenState(NS) → YellowState(NS) → RedState(EW) → GreenState(EW) → YellowState(EW)
+//        → RedState(NS) → …   (RedState(x) = todo en rojo; después se pone en verde x)
+public enum Axis { NS, EW; Axis opposite(); static Axis of(Road road); }
+public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds(); }
 public interface LightState {
-    LightColor color();
-    Duration duration(TrafficLight ctx);
+    LightColor colorFor(Axis axis);
+    Duration duration(LightTimings timings);   // SimConfig implementa LightTimings
     LightState next();
-    default boolean canPass() { return false; }
+    default boolean canPass(Axis axis) { return colorFor(axis) == LightColor.GREEN; }
+    String name();                              // para logs y HUD, p. ej. "GREEN(NS)"
 }
 
 // Strategy
@@ -159,7 +164,8 @@ public class Dijkstra<V, E extends Edge<V>> {
 ```
 
 - Un nuevo comportamiento de semáforo = una nueva clase `LightState`. **No** usar `switch`
-  sobre colores en `TrafficLight`.
+  sobre colores en `TrafficLight`: cada estado decide su color por eje.
+- `traffic` no depende de `core`: recibe las duraciones a través de `LightTimings`.
 - Una nueva forma de enrutar = una nueva `RouteStrategy`. **No** meter `if` en `Vehicle`.
 - Una nueva acción de usuario = un nuevo `Command`.
 
@@ -185,14 +191,38 @@ Ningún número mágico en el código. Todo en `config.properties` leído por `S
 engine.tickMillis=50
 lights.greenSeconds=8
 lights.yellowSeconds=2
-lights.redSeconds=10
+lights.allRedSeconds=1
 smart.queueThreshold=5
 smart.maxExtensionSeconds=6
 spawn.intervalMillis=1500
 vehicle.maxCount=150
+vehicle.car.maxSpeed=14
+vehicle.car.acceleration=3
+vehicle.car.deceleration=6
+vehicle.minGap=10
+intersection.stopLineOffset=14
+intersection.capacity=2
+intersection.boxLength=16
+intersection.approachMargin=2
+demo.carCount=4
+demo.seed=42
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
 ```
+
+- `lights.allRedSeconds`: duración de la fase en que **los dos ejes** están en rojo, entre el
+  amarillo de un eje y el verde del otro. Deja que los vehículos que ya entraron terminen de
+  cruzar. Reemplaza a `lights.redSeconds`: el rojo de un eje ya no tiene duración propia, dura
+  lo que dura el verde + amarillo + todo rojo del eje contrario.
+- `vehicle.car.deceleration`: frenado máximo de un auto (px/s²).
+- `vehicle.minGap`: distancia mínima entre un vehículo y el de delante (px).
+- `intersection.stopLineOffset`: distancia de la línea de detención al centro de la
+  intersección (px).
+- `intersection.capacity`: vehículos que pueden estar a la vez dentro de una intersección.
+- `intersection.boxLength`: largo de la zona de conflicto que se considera "dentro" (px).
+- `intersection.approachMargin`: margen extra antes de la línea de detención a partir del cual un
+  vehículo intenta reservar la zona (px); evita reservarla desde lejos.
+- `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
 
 ---
 

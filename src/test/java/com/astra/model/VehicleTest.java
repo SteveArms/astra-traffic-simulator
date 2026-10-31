@@ -18,7 +18,9 @@ class VehicleTest {
     private static final double DELTA = 1e-9;
     private static final double MAX_SPEED = 14;
     private static final double ACCELERATION = 3;
-    // La velocidad llega al tope en el primer update, así los cálculos son exactos.
+    private static final double DECELERATION = 6;
+    private static final double FREE = Double.POSITIVE_INFINITY;
+    // Llega al tope en el primer update.
     private static final double INSTANT_ACCELERATION = 1_000;
 
     private Intersection a;
@@ -45,14 +47,14 @@ class VehicleTest {
 
     @Test
     void changesRoadAndKeepsLeftoverDistance() {
-        var car = new Car(List.of(ab, bc), 10, INSTANT_ACCELERATION);
+        var car = new Car(List.of(ab, bc), 10, INSTANT_ACCELERATION, DECELERATION);
         for (int i = 0; i < 9; i++) {
-            car.update(1);
+            car.update(1, FREE);
         }
         assertEquals(ab, car.currentRoad());
         assertEquals(90, car.offset(), DELTA);
 
-        car.update(1.5);
+        car.update(1.5, FREE);
 
         assertEquals(bc, car.currentRoad());
         assertEquals(5, car.offset(), DELTA);
@@ -62,9 +64,9 @@ class VehicleTest {
 
     @Test
     void finishesAtDestination() {
-        var car = new Car(List.of(ab, bc), MAX_SPEED, ACCELERATION);
+        var car = car(ab, bc);
         for (int i = 0; i < 10_000 && !car.isFinished(); i++) {
-            car.update(0.05);
+            car.update(0.05, FREE);
         }
 
         assertTrue(car.isFinished());
@@ -73,16 +75,16 @@ class VehicleTest {
         assertEquals(c.y(), car.y(), DELTA);
         assertEquals(0, car.speed());
 
-        car.update(1);
+        car.update(1, FREE);
         assertEquals(c.y(), car.y(), DELTA);
     }
 
     @Test
     void speedNeverExceedsCap() {
-        var car = new Car(List.of(ab, bc), MAX_SPEED, ACCELERATION);
+        var car = car(ab, bc);
         boolean reachedMaxSpeed = false;
         for (int i = 0; i < 10_000 && !car.isFinished(); i++) {
-            car.update(0.05);
+            car.update(0.05, FREE);
             double cap = Math.min(MAX_SPEED, car.currentRoad().speedLimit());
             assertTrue(car.speed() <= cap + DELTA, "speed " + car.speed() + " > cap " + cap);
             reachedMaxSpeed |= Math.abs(car.speed() - MAX_SPEED) < DELTA;
@@ -92,17 +94,17 @@ class VehicleTest {
 
     @Test
     void headingFollowsRoadDirection() {
-        assertEquals(0, new Car(List.of(ab), MAX_SPEED, ACCELERATION).headingRad(), DELTA);
-        assertEquals(Math.PI, new Car(List.of(ba), MAX_SPEED, ACCELERATION).headingRad(), DELTA);
-        assertEquals(Math.PI / 2, new Car(List.of(bc), MAX_SPEED, ACCELERATION).headingRad(), DELTA);
-        assertEquals(-Math.PI / 2, new Car(List.of(cb), MAX_SPEED, ACCELERATION).headingRad(), DELTA);
+        assertEquals(0, car(ab).headingRad(), DELTA);
+        assertEquals(Math.PI, car(ba).headingRad(), DELTA);
+        assertEquals(Math.PI / 2, car(bc).headingRad(), DELTA);
+        assertEquals(-Math.PI / 2, car(cb).headingRad(), DELTA);
     }
 
     @Test
     void assignRouteResetsProgress() {
-        var car = new Car(List.of(ab), MAX_SPEED, INSTANT_ACCELERATION);
+        var car = new Car(List.of(ab), MAX_SPEED, INSTANT_ACCELERATION, DECELERATION);
         for (int i = 0; i < 100 && !car.isFinished(); i++) {
-            car.update(1);
+            car.update(1, FREE);
         }
         assertTrue(car.isFinished());
 
@@ -116,25 +118,42 @@ class VehicleTest {
 
     @Test
     void invalidRoutesAreRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new Car(List.of(), MAX_SPEED, ACCELERATION));
-        assertThrows(IllegalArgumentException.class, () -> new Car(List.of(ab, ab), MAX_SPEED, ACCELERATION));
-        var car = new Car(List.of(ab), MAX_SPEED, ACCELERATION);
+        assertThrows(IllegalArgumentException.class, () -> car());
+        assertThrows(IllegalArgumentException.class, () -> car(ab, ab));
+        var car = car(ab);
         assertThrows(IllegalArgumentException.class, () -> car.assignRoute(List.of(bc, ab)));
     }
 
     @Test
     void carIdsAreSequentialAndViewMatchesState() {
-        var first = new Car(List.of(ab), MAX_SPEED, ACCELERATION);
-        var second = new Car(List.of(ab), MAX_SPEED, ACCELERATION);
+        var first = car(ab);
+        var second = car(ab);
 
         assertTrue(first.id().matches("CAR-\\d+"), first.id());
         assertNotEquals(first.id(), second.id());
 
-        first.update(1);
+        first.update(1, FREE);
         VehicleView view = first.toView();
         assertEquals(first.id(), view.id());
         assertEquals(VehicleKind.CAR, view.kind());
         assertEquals(first.x(), view.x(), DELTA);
         assertEquals(first.speed(), view.speed(), DELTA);
+    }
+
+    @Test
+    void stopsBeforeFreeDistance() {
+        var car = car(ab);
+        double obstacle = 30;
+        for (int i = 0; i < 2_000; i++) {
+            car.update(0.05, obstacle - car.offset());
+            assertTrue(car.offset() <= obstacle + DELTA, "offset " + car.offset());
+        }
+
+        assertEquals(0, car.speed(), DELTA);
+        assertEquals(obstacle, car.offset(), 0.5);
+    }
+
+    private static Car car(Road... route) {
+        return new Car(List.of(route), MAX_SPEED, ACCELERATION, DECELERATION);
     }
 }

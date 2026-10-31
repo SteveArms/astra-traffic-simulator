@@ -1,5 +1,6 @@
 package com.astra.core;
 
+import com.astra.traffic.LightTimings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -15,20 +16,26 @@ import java.util.Properties;
  * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
  * Thread-safe por ser inmutable.
  */
-public final class SimConfig {
+public final class SimConfig implements LightTimings {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
     static final String TICK_MILLIS = "engine.tickMillis";
     static final String GREEN_SECONDS = "lights.greenSeconds";
     static final String YELLOW_SECONDS = "lights.yellowSeconds";
-    static final String RED_SECONDS = "lights.redSeconds";
+    static final String ALL_RED_SECONDS = "lights.allRedSeconds";
     static final String SMART_QUEUE_THRESHOLD = "smart.queueThreshold";
     static final String SMART_MAX_EXTENSION_SECONDS = "smart.maxExtensionSeconds";
     static final String SPAWN_INTERVAL_MILLIS = "spawn.intervalMillis";
     static final String VEHICLE_MAX_COUNT = "vehicle.maxCount";
     static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
     static final String CAR_ACCELERATION = "vehicle.car.acceleration";
+    static final String CAR_DECELERATION = "vehicle.car.deceleration";
+    static final String MIN_GAP = "vehicle.minGap";
+    static final String STOP_LINE_OFFSET = "intersection.stopLineOffset";
+    static final String INTERSECTION_CAPACITY = "intersection.capacity";
+    static final String BOX_LENGTH = "intersection.boxLength";
+    static final String APPROACH_MARGIN = "intersection.approachMargin";
     static final String DEMO_CAR_COUNT = "demo.carCount";
     static final String DEMO_SEED = "demo.seed";
     static final String MAP_FILE = "map.file";
@@ -38,13 +45,19 @@ public final class SimConfig {
     private static final long DEFAULT_TICK_MILLIS = 50;
     private static final long DEFAULT_GREEN_SECONDS = 8;
     private static final long DEFAULT_YELLOW_SECONDS = 2;
-    private static final long DEFAULT_RED_SECONDS = 10;
+    private static final long DEFAULT_ALL_RED_SECONDS = 1;
     private static final int DEFAULT_SMART_QUEUE_THRESHOLD = 5;
     private static final long DEFAULT_SMART_MAX_EXTENSION_SECONDS = 6;
     private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 1500;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
     private static final double DEFAULT_CAR_ACCELERATION = 3;
+    private static final double DEFAULT_CAR_DECELERATION = 6;
+    private static final double DEFAULT_MIN_GAP = 10;
+    private static final double DEFAULT_STOP_LINE_OFFSET = 14;
+    private static final int DEFAULT_INTERSECTION_CAPACITY = 2;
+    private static final double DEFAULT_BOX_LENGTH = 16;
+    private static final double DEFAULT_APPROACH_MARGIN = 2;
     private static final int DEFAULT_DEMO_CAR_COUNT = 4;
     private static final long DEFAULT_DEMO_SEED = 42;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
@@ -53,13 +66,19 @@ public final class SimConfig {
     private final Duration tickMillis;
     private final Duration greenSeconds;
     private final Duration yellowSeconds;
-    private final Duration redSeconds;
+    private final Duration allRedSeconds;
     private final int smartQueueThreshold;
     private final Duration smartMaxExtensionSeconds;
     private final Duration spawnIntervalMillis;
     private final int vehicleMaxCount;
     private final double carMaxSpeed;
     private final double carAcceleration;
+    private final double carDeceleration;
+    private final double minGap;
+    private final double stopLineOffset;
+    private final int intersectionCapacity;
+    private final double boxLength;
+    private final double approachMargin;
     private final int demoCarCount;
     private final long demoSeed;
     private final String mapFile;
@@ -69,7 +88,7 @@ public final class SimConfig {
         tickMillis = Duration.ofMillis(positiveLong(p, TICK_MILLIS, DEFAULT_TICK_MILLIS));
         greenSeconds = Duration.ofSeconds(positiveLong(p, GREEN_SECONDS, DEFAULT_GREEN_SECONDS));
         yellowSeconds = Duration.ofSeconds(positiveLong(p, YELLOW_SECONDS, DEFAULT_YELLOW_SECONDS));
-        redSeconds = Duration.ofSeconds(positiveLong(p, RED_SECONDS, DEFAULT_RED_SECONDS));
+        allRedSeconds = Duration.ofSeconds(positiveLong(p, ALL_RED_SECONDS, DEFAULT_ALL_RED_SECONDS));
         smartQueueThreshold = positiveInt(p, SMART_QUEUE_THRESHOLD, DEFAULT_SMART_QUEUE_THRESHOLD);
         smartMaxExtensionSeconds = Duration.ofSeconds(
                 positiveLong(p, SMART_MAX_EXTENSION_SECONDS, DEFAULT_SMART_MAX_EXTENSION_SECONDS));
@@ -78,6 +97,12 @@ public final class SimConfig {
         vehicleMaxCount = positiveInt(p, VEHICLE_MAX_COUNT, DEFAULT_VEHICLE_MAX_COUNT);
         carMaxSpeed = positiveDouble(p, CAR_MAX_SPEED, DEFAULT_CAR_MAX_SPEED);
         carAcceleration = positiveDouble(p, CAR_ACCELERATION, DEFAULT_CAR_ACCELERATION);
+        carDeceleration = positiveDouble(p, CAR_DECELERATION, DEFAULT_CAR_DECELERATION);
+        minGap = positiveDouble(p, MIN_GAP, DEFAULT_MIN_GAP);
+        stopLineOffset = positiveDouble(p, STOP_LINE_OFFSET, DEFAULT_STOP_LINE_OFFSET);
+        intersectionCapacity = positiveInt(p, INTERSECTION_CAPACITY, DEFAULT_INTERSECTION_CAPACITY);
+        boxLength = positiveDouble(p, BOX_LENGTH, DEFAULT_BOX_LENGTH);
+        approachMargin = positiveDouble(p, APPROACH_MARGIN, DEFAULT_APPROACH_MARGIN);
         demoCarCount = positiveInt(p, DEMO_CAR_COUNT, DEFAULT_DEMO_CAR_COUNT);
         demoSeed = positiveLong(p, DEMO_SEED, DEFAULT_DEMO_SEED);
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
@@ -108,16 +133,19 @@ public final class SimConfig {
         return tickMillis;
     }
 
+    @Override
     public Duration greenSeconds() {
         return greenSeconds;
     }
 
+    @Override
     public Duration yellowSeconds() {
         return yellowSeconds;
     }
 
-    public Duration redSeconds() {
-        return redSeconds;
+    @Override
+    public Duration allRedSeconds() {
+        return allRedSeconds;
     }
 
     public int smartQueueThreshold() {
@@ -146,6 +174,30 @@ public final class SimConfig {
 
     public long demoSeed() {
         return demoSeed;
+    }
+
+    public double carDeceleration() {
+        return carDeceleration;
+    }
+
+    public double minGap() {
+        return minGap;
+    }
+
+    public double stopLineOffset() {
+        return stopLineOffset;
+    }
+
+    public int intersectionCapacity() {
+        return intersectionCapacity;
+    }
+
+    public double boxLength() {
+        return boxLength;
+    }
+
+    public double approachMargin() {
+        return approachMargin;
     }
 
     public int demoCarCount() {

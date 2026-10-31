@@ -4,12 +4,12 @@ import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Vehículo que recorre una ruta de vías consecutivas.
  *
- * @implNote El estado mutable lo modifica solo el hilo {@code astra-engine}; la vista recibe
- * copias inmutables mediante {@link #toView()}.
+ * @implNote Solo astra-engine modifica su estado; la vista usa {@link #toView()}.
  */
 public abstract class Vehicle {
 
@@ -17,6 +17,7 @@ public abstract class Vehicle {
     private final VehicleKind kind;
     private final double maxSpeed;
     private final double acceleration;
+    private final double deceleration;
 
     private List<Road> route;
     private int roadIndex;
@@ -24,18 +25,19 @@ public abstract class Vehicle {
     private double speed;
     private boolean finished;
 
-    protected Vehicle(String id, VehicleKind kind, List<Road> route, double maxSpeed, double acceleration) {
+    protected Vehicle(String id, VehicleKind kind, List<Road> route, double maxSpeed, double acceleration,
+            double deceleration) {
         this.id = Objects.requireNonNull(id, "id");
         this.kind = Objects.requireNonNull(kind, "kind");
-        if (!(maxSpeed > 0) || !(acceleration > 0)) {
-            throw new IllegalArgumentException("maxSpeed and acceleration must be > 0 for " + id);
+        if (!(maxSpeed > 0) || !(acceleration > 0) || !(deceleration > 0)) {
+            throw new IllegalArgumentException("maxSpeed, acceleration and deceleration must be > 0 for " + id);
         }
         this.maxSpeed = maxSpeed;
         this.acceleration = acceleration;
+        this.deceleration = deceleration;
         assignRoute(route);
     }
 
-    /** @throws IllegalArgumentException si la ruta está vacía o sus vías no son consecutivas */
     public final void assignRoute(List<Road> newRoute) {
         var copy = List.copyOf(newRoute);
         if (copy.isEmpty()) {
@@ -53,12 +55,23 @@ public abstract class Vehicle {
         finished = false;
     }
 
-    public void update(double dtSeconds) {
+    /** @param freeDistance distancia disponible antes de tener que estar detenido */
+    public void update(double dtSeconds, double freeDistance) {
         if (finished) {
             return;
         }
-        speed = Math.min(speed + acceleration * dtSeconds, speedCap());
-        offset += speed * dtSeconds;
+        double free = Math.max(0, freeDistance);
+        // Velocidad desde la que todavía se puede frenar dentro de free.
+        double target = Math.min(speedCap(), Math.sqrt(2 * deceleration * free));
+        speed = speed < target
+                ? Math.min(target, speed + acceleration * dtSeconds)
+                : Math.max(target, speed - deceleration * dtSeconds);
+        double step = speed * dtSeconds;
+        if (step > free) {
+            step = free;
+            speed = dtSeconds > 0 ? free / dtSeconds : 0;
+        }
+        offset += step;
         while (offset >= currentRoad().length()) {
             if (roadIndex == route.size() - 1) {
                 offset = currentRoad().length();
@@ -68,7 +81,6 @@ public abstract class Vehicle {
             }
             offset -= currentRoad().length();
             roadIndex++;
-            // La nueva vía puede tener un límite menor.
             speed = Math.min(speed, speedCap());
         }
     }
@@ -94,6 +106,14 @@ public abstract class Vehicle {
 
     public Road currentRoad() {
         return route.get(roadIndex);
+    }
+
+    public Optional<Road> nextRoad() {
+        return roadIndex + 1 < route.size() ? Optional.of(route.get(roadIndex + 1)) : Optional.empty();
+    }
+
+    public double remainingOnRoad() {
+        return currentRoad().length() - offset;
     }
 
     public Intersection destination() {
@@ -130,6 +150,10 @@ public abstract class Vehicle {
 
     public double acceleration() {
         return acceleration;
+    }
+
+    public double deceleration() {
+        return deceleration;
     }
 
     private double speedCap() {

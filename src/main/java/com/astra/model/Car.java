@@ -8,7 +8,7 @@ public final class Car extends Vehicle {
 
     private static final AtomicInteger SEQUENCE = new AtomicInteger();
 
-    public Car(List<Road> route, double maxSpeed, double acceleration) {
-        super("CAR-" + SEQUENCE.incrementAndGet(), VehicleKind.CAR, route, maxSpeed, acceleration);
+    public Car(List<Road> route, double maxSpeed, double acceleration, double deceleration) {
+        super("CAR-" + SEQUENCE.incrementAndGet(), VehicleKind.CAR, route, maxSpeed, acceleration, deceleration);
     }
 }
