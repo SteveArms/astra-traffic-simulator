@@ -5,7 +5,8 @@ tráfico urbano con calles, semáforos inteligentes y vehículos con distintos c
 Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
 
 - El motor de simulación corre en su propio hilo con paso fijo.
-- Los semáforos cambian de estado de forma asíncrona. *(En desarrollo)*
+- Los semáforos cambian de estado de forma asíncrona (patrón State) y cada intersección limita
+  cuántos vehículos cruzan a la vez con un `Semaphore`.
 - La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo.
 - Los vehículos cruzan las intersecciones con Reloj de Lamport y Ricart‑Agrawala. *(En desarrollo)*
 
@@ -36,11 +37,13 @@ Usa `mvn javafx:run` para abrir la aplicación; `java -jar` falla porque no encu
 ```
 src/main/java/com/astra/
 ├── app/          AstraApp: punto de entrada JavaFX
-├── core/         SimConfig, SimulationEngine, WorldState, WorldSnapshot, DemoScenario
+├── core/         SimConfig, SimulationEngine, WorldState, WorldSnapshot, LightView,
+│                 IntersectionZone(s), DemoScenario
 ├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph
 │   └── algo/     Dijkstra; A* (En desarrollo)
 ├── model/        Vehicle, Car, VehicleKind, VehicleView; Bus, Ambulance y carriles (En desarrollo)
-├── traffic/      Semáforos con patrón State (En desarrollo)
+├── traffic/      LightState, Green/Yellow/RedState, TrafficLight, LightController;
+│                 SmartAdaptiveState (En desarrollo)
 ├── routing/      Estrategias de ruta (En desarrollo)
 ├── command/      Comandos y CommandBus (En desarrollo)
 ├── events/       Eventos y su cola de prioridad (En desarrollo)
@@ -60,7 +63,8 @@ JavaFX, así que el motor se puede probar sin interfaz gráfica.
 
 | Elemento | Dónde | Para qué | Estado |
 | --- | --- | --- | --- |
-| State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`, `SmartAdaptiveState`) | Cada color de semáforo es una clase con su duración y su siguiente estado | En desarrollo |
+| State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`) | Cada fase del semáforo es una clase que decide el color de cada eje (NS/EW), su duración y la fase siguiente | Implementado (`SmartAdaptiveState` en desarrollo) |
+| `Semaphore` | `core.IntersectionZone` | Limita cuántos vehículos ocupan a la vez la zona de cruce; solo `tryAcquire`, nunca bloquea el tick | Implementado |
 | Strategy | `routing` (`RouteStrategy`) | Cambiar cómo calcula su ruta un vehículo: más corta, menos congestionada o aleatoria | En desarrollo |
 | Command | `command` (`Command`, `CommandBus`) | La UI envía acciones (pausa, velocidad, aparición de vehículos) y el motor las ejecuta al inicio de cada tick | En desarrollo |
 | `Graph<V, E extends Edge<V>>` | `graph` | Grafo dirigido genérico y seguro para lecturas concurrentes | Implementado |

@@ -10,6 +10,7 @@ import com.astra.model.Car;
 import com.astra.model.Vehicle;
 import com.astra.traffic.Axis;
 import com.astra.traffic.GreenState;
+import com.astra.traffic.LightColor;
 import com.astra.traffic.LightController;
 import com.astra.traffic.RedState;
 import com.astra.traffic.TestLights;
@@ -152,5 +153,23 @@ class DrivingTest {
         assertTrue(secondWaited);
 
         stepUntil(() -> second.currentRoad().equals(westOut));
+    }
+
+    @Test
+    void snapshotShowsLightColorsAndZoneOccupancy() {
+        build(SimConfig.load());
+        TestLights.force(light, new GreenState(Axis.EW));
+        Vehicle car = addCar(westIn, eastOut);
+        stepUntil(() -> zone.contains(car.id()));
+
+        LightView view = engine.latestSnapshot().lights().get(0);
+
+        assertEquals(1, engine.latestSnapshot().lightCount());
+        assertEquals("C", view.intersectionId());
+        assertEquals(LightColor.GREEN, view.ew());
+        assertEquals(LightColor.RED, view.ns());
+        assertEquals("GREEN(EW)", view.stateName());
+        assertEquals(1, view.zoneOccupancy());
+        assertEquals(cfg.intersectionCapacity(), view.zoneCapacity());
     }
 }

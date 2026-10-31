@@ -1,11 +1,15 @@
 package com.astra.core;
 
+import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleView;
+import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
 import com.astra.traffic.LightController;
+import com.astra.traffic.LightState;
+import com.astra.traffic.TrafficLight;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -91,7 +95,17 @@ public final class WorldState {
         for (Vehicle vehicle : vehicles) {
             views.add(vehicle.toView());
         }
-        return new WorldSnapshot(tick, simTimeSeconds, views);
+        List<LightView> lightViews = new ArrayList<>();
+        for (TrafficLight light : lights.lights()) {
+            // Una sola lectura del estado: NS y EW salen del mismo estado.
+            LightState state = light.state();
+            Intersection at = light.intersection();
+            IntersectionZone zone = zones.zoneOf(at);
+            lightViews.add(new LightView(at.id(), at.x(), at.y(), state.colorFor(Axis.NS), state.colorFor(Axis.EW),
+                    state.name(), zone.occupancy(), zone.capacity()));
+        }
+        lightViews.sort(Comparator.comparing(LightView::intersectionId));
+        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews);
     }
 
     /** @implNote Called from astra-engine. */

@@ -1,11 +1,13 @@
 package com.astra.view;
 
+import com.astra.core.LightView;
 import com.astra.core.WorldSnapshot;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.traffic.LightColor;
 import java.util.Objects;
 import java.util.function.Supplier;
 import javafx.animation.AnimationTimer;
@@ -19,7 +21,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 
 /**
- * Capa estática (calles) y capa dinámica (vehículos y HUD) dibujada desde el último snapshot.
+ * Capa estática (calles) y capa dinámica (semáforos, vehículos y HUD) dibujada desde el último snapshot.
  *
  * @implNote Called from the FX Application Thread.
  */
@@ -36,6 +38,11 @@ public final class CityRenderer extends StackPane {
     private static final double VEHICLE_LENGTH = 12;
     private static final double VEHICLE_WIDTH = 6;
     private static final double VEHICLE_RIGHT_OFFSET = 5;
+    private static final double OUTLINE_WIDTH = 1;
+
+    private static final double LIGHT_RADIUS = 4;
+    private static final double LIGHT_OFFSET = 8;
+    private static final double FULL_BORDER_WIDTH = 2;
 
     private static final Font HUD_FONT = Font.font("Monospaced", 13);
     private static final double HUD_MARGIN = 8;
@@ -46,17 +53,23 @@ public final class CityRenderer extends StackPane {
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final int SECONDS_PER_MINUTE = 60;
 
-    // Contraste medido: texto >= 4.5:1, calles y vehículos >= 3:1.
+    // Contraste medido: texto >= 4.5:1; calles, vehículos y luces >= 3:1 contra su fondo o su contorno.
     private static final Color BACKGROUND = Color.web("#030712");
     private static final Color ROAD = Color.web("#5A6372");
     private static final Color ROAD_CENTER_LINE = Color.web("#E5E7EB");
     private static final Color INTERSECTION = Color.web("#5A6372");
+    private static final Color INTERSECTION_OCCUPIED = Color.web("#8B95A5");
+    private static final Color INTERSECTION_FULL_BORDER = Color.web("#FB923C");
+    private static final Color OUTLINE = Color.web("#030712");
     private static final Color LABEL_TEXT = Color.web("#9CA3AF");
     private static final Color HUD_SURFACE = Color.web("#1F2937");
     private static final Color HUD_TEXT = Color.web("#F3F4F6");
     private static final Color CAR = Color.web("#93C5FD");
     private static final Color BUS = Color.web("#FCD34D");
     private static final Color AMBULANCE = Color.web("#FCA5A5");
+    private static final Color LIGHT_GREEN = Color.web("#4ADE80");
+    private static final Color LIGHT_YELLOW = Color.web("#FACC15");
+    private static final Color LIGHT_RED = Color.web("#F87171");
 
     private final RoadGraph graph;
     private final Supplier<WorldSnapshot> snapshotSource;
@@ -64,6 +77,8 @@ public final class CityRenderer extends StackPane {
     private final Canvas dynamicLayer = new Canvas();
     private final AnimationTimer timer;
 
+    private double offsetX;
+    private double offsetY;
     private long fpsWindowStart;
     private int framesInWindow;
     private int fps;
@@ -100,9 +115,12 @@ public final class CityRenderer extends StackPane {
     }
 
     private void drawStatic() {
+        centerMap();
         GraphicsContext gc = staticLayer.getGraphicsContext2D();
         gc.setFill(BACKGROUND);
         gc.fillRect(0, 0, staticLayer.getWidth(), staticLayer.getHeight());
+        gc.save();
+        gc.translate(offsetX, offsetY);
 
         gc.setLineCap(StrokeLineCap.BUTT);
         for (Road road : graph.edges()) {
@@ -124,6 +142,16 @@ public final class CityRenderer extends StackPane {
             gc.setFill(LABEL_TEXT);
             gc.fillText(i.id(), i.x() + half + LABEL_GAP, i.y() + half + LABEL_GAP);
         }
+        gc.restore();
+    }
+
+    private void centerMap() {
+        double minX = graph.vertices().stream().mapToDouble(Intersection::x).min().orElse(0);
+        double maxX = graph.vertices().stream().mapToDouble(Intersection::x).max().orElse(0);
+        double minY = graph.vertices().stream().mapToDouble(Intersection::y).min().orElse(0);
+        double maxY = graph.vertices().stream().mapToDouble(Intersection::y).max().orElse(0);
+        offsetX = (staticLayer.getWidth() - (maxX - minX)) / 2 - minX;
+        offsetY = (staticLayer.getHeight() - (maxY - minY)) / 2 - minY;
     }
 
     private void drawRoad(GraphicsContext gc, Road road, int totalLanes, boolean twoWay) {
@@ -154,10 +182,63 @@ public final class CityRenderer extends StackPane {
         WorldSnapshot snapshot = snapshotSource.get();
         GraphicsContext gc = dynamicLayer.getGraphicsContext2D();
         gc.clearRect(0, 0, dynamicLayer.getWidth(), dynamicLayer.getHeight());
+        gc.save();
+        gc.translate(offsetX, offsetY);
+        for (LightView light : snapshot.lights()) {
+            drawZone(gc, light);
+            drawLight(gc, light);
+        }
         for (VehicleView vehicle : snapshot.vehicles()) {
             drawVehicle(gc, vehicle);
         }
+        gc.restore();
         drawHud(gc, snapshot);
+    }
+
+    private void drawZone(GraphicsContext gc, LightView light) {
+        if (!light.zoneOccupied()) {
+            return;
+        }
+        double half = INTERSECTION_SIZE / 2;
+        double left = light.x() - half;
+        double top = light.y() - half;
+        gc.setFill(INTERSECTION_OCCUPIED);
+        gc.fillRect(left, top, INTERSECTION_SIZE, INTERSECTION_SIZE);
+        if (light.zoneFull()) {
+            // El naranja contrasta poco con el gris claro: lo separa un contorno oscuro.
+            double outer = FULL_BORDER_WIDTH / 2 + OUTLINE_WIDTH;
+            gc.setStroke(INTERSECTION_FULL_BORDER);
+            gc.setLineWidth(FULL_BORDER_WIDTH);
+            gc.strokeRect(left - outer, top - outer, INTERSECTION_SIZE + 2 * outer, INTERSECTION_SIZE + 2 * outer);
+            gc.setStroke(OUTLINE);
+            gc.setLineWidth(OUTLINE_WIDTH);
+            gc.strokeRect(left - OUTLINE_WIDTH / 2, top - OUTLINE_WIDTH / 2,
+                    INTERSECTION_SIZE + OUTLINE_WIDTH, INTERSECTION_SIZE + OUTLINE_WIDTH);
+        }
+    }
+
+    private void drawLight(GraphicsContext gc, LightView light) {
+        drawLamp(gc, light.x(), light.y() - LIGHT_OFFSET, light.ns());
+        drawLamp(gc, light.x(), light.y() + LIGHT_OFFSET, light.ns());
+        drawLamp(gc, light.x() - LIGHT_OFFSET, light.y(), light.ew());
+        drawLamp(gc, light.x() + LIGHT_OFFSET, light.y(), light.ew());
+    }
+
+    private void drawLamp(GraphicsContext gc, double x, double y, LightColor color) {
+        double diameter = 2 * LIGHT_RADIUS;
+        gc.setFill(lampColor(color));
+        gc.fillOval(x - LIGHT_RADIUS, y - LIGHT_RADIUS, diameter, diameter);
+        gc.setStroke(OUTLINE);
+        gc.setLineWidth(OUTLINE_WIDTH);
+        gc.strokeOval(x - LIGHT_RADIUS, y - LIGHT_RADIUS, diameter, diameter);
+    }
+
+    private static Color lampColor(LightColor color) {
+        return switch (color) {
+            case GREEN -> LIGHT_GREEN;
+            case YELLOW -> LIGHT_YELLOW;
+            case RED -> LIGHT_RED;
+        };
     }
 
     private void drawVehicle(GraphicsContext gc, VehicleView vehicle) {
@@ -170,6 +251,9 @@ public final class CityRenderer extends StackPane {
         gc.rotate(Math.toDegrees(heading));
         gc.setFill(colorOf(vehicle.kind()));
         gc.fillRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
+        gc.setStroke(OUTLINE);
+        gc.setLineWidth(OUTLINE_WIDTH);
+        gc.strokeRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
         gc.restore();
     }
 
@@ -187,6 +271,7 @@ public final class CityRenderer extends StackPane {
             "Tick      %d".formatted(snapshot.tick()),
             "Tiempo    %02d:%02d".formatted(totalSeconds / SECONDS_PER_MINUTE, totalSeconds % SECONDS_PER_MINUTE),
             "Vehículos %d".formatted(snapshot.vehicleCount()),
+            "Semáforos %d".formatted(snapshot.lightCount()),
             "FPS       %d".formatted(fps),
         };
         double height = lines.length * HUD_LINE_HEIGHT + 2 * HUD_PADDING;
