@@ -7,23 +7,16 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Grafo dirigido genérico con listas de adyacencia.
- *
- * <p>Las lecturas son seguras desde cualquier hilo. El grafo se construye antes de iniciar
- * la simulación; durante la simulación solo se lee.
- */
+/** Grafo dirigido genérico. Se construye antes de la simulación; luego se lee desde cualquier hilo. */
 public class Graph<V, E extends Edge<V>> {
 
     private final ConcurrentHashMap<V, CopyOnWriteArrayList<E>> adjacency = new ConcurrentHashMap<>();
 
-    /** @return {@code false} si el vértice ya existía */
     public boolean addVertex(V vertex) {
         Objects.requireNonNull(vertex, "vertex");
         return adjacency.putIfAbsent(vertex, new CopyOnWriteArrayList<>()) == null;
     }
 
-    /** @throws IllegalArgumentException si el origen o el destino no son vértices del grafo */
     public void addEdge(E edge) {
         Objects.requireNonNull(edge, "edge");
         requireVertex(edge.to(), "to");
@@ -34,7 +27,6 @@ public class Graph<V, E extends Edge<V>> {
         return vertex != null && adjacency.containsKey(vertex);
     }
 
-    /** @throws IllegalArgumentException si el vértice no pertenece al grafo */
     public List<E> outgoing(V vertex) {
         return Collections.unmodifiableList(adjacency.get(requireVertex(vertex, "vertex")));
     }

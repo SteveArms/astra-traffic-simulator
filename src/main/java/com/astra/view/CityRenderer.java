@@ -19,15 +19,13 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 
 /**
- * Dibuja la ciudad en dos capas: una estática (calles e intersecciones) que se pinta solo al
- * cambiar de tamaño, y una dinámica (vehículos y HUD) que se repinta en cada frame a partir
- * del último {@link WorldSnapshot}. Nunca modifica el mundo.
+ * Capa estática (calles) y capa dinámica (vehículos y HUD) dibujada desde el último snapshot.
  *
- * @implNote Todos sus métodos se llaman desde el FX Application Thread.
+ * @implNote Called from the FX Application Thread.
  */
 public final class CityRenderer extends StackPane {
 
-    // Constantes de presentación (píxeles y colores), no de simulación.
+    // Presentación, no simulación: no van a config.properties.
     private static final double LANE_WIDTH = 10;
     private static final double CENTER_LINE_WIDTH = 1;
     private static final double[] CENTER_LINE_DASHES = {6, 6};
@@ -37,7 +35,6 @@ public final class CityRenderer extends StackPane {
 
     private static final double VEHICLE_LENGTH = 12;
     private static final double VEHICLE_WIDTH = 6;
-    // Centro del carril derecho respecto al eje de la calle.
     private static final double VEHICLE_RIGHT_OFFSET = 5;
 
     private static final Font HUD_FONT = Font.font("Monospaced", 13);
@@ -49,7 +46,7 @@ public final class CityRenderer extends StackPane {
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final int SECONDS_PER_MINUTE = 60;
 
-    // Colores por rol. Contraste medido: textos >= 4.5:1, calles y vehículos >= 3:1 sobre su fondo.
+    // Contraste medido: texto >= 4.5:1, calles y vehículos >= 3:1.
     private static final Color BACKGROUND = Color.web("#030712");
     private static final Color ROAD = Color.web("#5A6372");
     private static final Color ROAD_CENTER_LINE = Color.web("#E5E7EB");
@@ -75,7 +72,7 @@ public final class CityRenderer extends StackPane {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
 
-        // Sin esto el StackPane hereda el tamaño mínimo de los Canvas y no puede encogerse.
+        // Si no, el StackPane no puede encogerse por debajo de los Canvas.
         setMinSize(0, 0);
         for (Canvas layer : new Canvas[] {staticLayer, dynamicLayer}) {
             layer.widthProperty().bind(widthProperty());
@@ -113,7 +110,6 @@ public final class CityRenderer extends StackPane {
             if (reverse == null) {
                 drawRoad(gc, road, road.lanes(), false);
             } else if (road.from().id().compareTo(road.to().id()) < 0) {
-                // Cada par de doble sentido se dibuja una sola vez.
                 drawRoad(gc, road, road.lanes() + reverse.lanes(), true);
             }
         }
@@ -166,7 +162,7 @@ public final class CityRenderer extends StackPane {
 
     private void drawVehicle(GraphicsContext gc, VehicleView vehicle) {
         double heading = vehicle.headingRad();
-        // Normal derecha con el eje y hacia abajo: (-sin, cos).
+        // Normal derecha con y hacia abajo.
         double x = vehicle.x() - Math.sin(heading) * VEHICLE_RIGHT_OFFSET;
         double y = vehicle.y() + Math.cos(heading) * VEHICLE_RIGHT_OFFSET;
         gc.save();

@@ -10,11 +10,9 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Estado mutable del mundo: el grafo vial y los vehículos en circulación.
+ * Grafo vial y vehículos en circulación.
  *
- * @implNote Su único dueño es el hilo {@code astra-engine}: la lista de vehículos no está
- * sincronizada y solo se toca desde el motor (o desde el hilo de configuración antes de
- * arrancarlo). Los demás hilos ven el mundo a través de {@link WorldSnapshot}.
+ * @implNote Su único dueño es astra-engine; los demás hilos usan {@link WorldSnapshot}.
  */
 public final class WorldState {
 
@@ -30,16 +28,15 @@ public final class WorldState {
         return graph;
     }
 
-    /** @implNote Called from astra-engine, or from the setup thread before the engine starts. */
+    /** @implNote Called from astra-engine, or before the engine starts. */
     public void addVehicle(Vehicle vehicle) {
         vehicles.add(Objects.requireNonNull(vehicle, "vehicle"));
     }
 
     /**
-     * Se invoca cuando un vehículo termina su ruta. Si el gancho le asigna una ruta nueva sigue
-     * en el mundo; si no, se elimina.
+     * Si el gancho no asigna una ruta nueva, el vehículo se elimina.
      *
-     * @implNote Called from the setup thread before the engine starts; the hook runs on astra-engine.
+     * @implNote The hook runs on astra-engine.
      */
     public void setOnVehicleFinished(Consumer<Vehicle> hook) {
         onVehicleFinished = Objects.requireNonNull(hook, "hook");
@@ -47,7 +44,7 @@ public final class WorldState {
 
     /** @implNote Called from astra-engine. */
     public void update(double dtSeconds) {
-        // Índice fijo: el gancho puede agregar vehículos, que empiezan a moverse en el siguiente tick.
+        // Tamaño fijo: el gancho puede agregar vehículos durante el recorrido.
         int count = vehicles.size();
         for (int i = 0; i < count; i++) {
             Vehicle vehicle = vehicles.get(i);
@@ -73,11 +70,7 @@ public final class WorldState {
         return vehicles.size();
     }
 
-    /**
-     * Vista de solo lectura.
-     *
-     * @implNote Called from astra-engine, or from tests with the engine stopped.
-     */
+    /** @implNote Called from astra-engine, or from tests with the engine stopped. */
     public List<Vehicle> vehicles() {
         return Collections.unmodifiableList(vehicles);
     }

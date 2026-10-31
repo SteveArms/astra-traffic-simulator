@@ -119,7 +119,7 @@ class SimulationEngineTest {
         assertEquals(looping.id(), engine.latestSnapshot().vehicles().get(0).id());
     }
 
-    // El hilo puede tardar unos milisegundos en morir después de awaitTermination.
+    // El hilo tarda unos ms en morir tras awaitTermination.
     private static boolean engineThreadGone() throws InterruptedException {
         for (int i = 0; i < 100; i++) {
             boolean alive = Thread.getAllStackTraces().keySet().stream()

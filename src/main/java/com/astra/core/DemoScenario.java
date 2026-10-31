@@ -13,30 +13,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
-/**
- * Escenario de demostración: autos con rutas aleatorias que, al llegar, reciben otra ruta.
- *
- * <p><b>Temporal:</b> el Día 4 lo reemplaza {@code VehicleSpawner}.
- */
+/** Autos con rutas aleatorias que se renuevan al llegar. Temporal: el Día 4 lo reemplaza VehicleSpawner. */
 public final class DemoScenario {
 
     private DemoScenario() {
     }
 
-    /**
-     * @throws IllegalStateException si el mapa no tiene dos intersecciones conectadas
-     * @implNote Called from the setup thread before the engine starts; the hook it registers
-     * runs on astra-engine, the only thread that uses the {@link Random} afterwards.
-     */
+    /** @implNote Called before the engine starts; the registered hook runs on astra-engine. */
     public static void seed(WorldState world, SimConfig cfg, long seed) {
         RoadGraph graph = world.graph();
         var random = new Random(seed);
         var dijkstra = new Dijkstra<Intersection, Road>();
-        // Orden fijo: Set.copyOf no garantiza orden y la semilla debe dar siempre el mismo escenario.
+        // Orden fijo para que la semilla sea reproducible.
         List<Intersection> intersections = new ArrayList<>(graph.vertices());
         intersections.sort(Comparator.comparing(Intersection::id));
 
-        // Orígenes distintos mientras alcancen, para que los autos no arranquen superpuestos.
         List<Intersection> origins = new ArrayList<>(intersections);
         Collections.shuffle(origins, random);
         for (int i = 0; i < cfg.demoCarCount(); i++) {
@@ -55,7 +46,6 @@ public final class DemoScenario {
                 .ifPresent(vehicle::assignRoute);
     }
 
-    // Prueba destinos en orden aleatorio hasta encontrar uno alcanzable.
     private static Optional<List<Road>> randomRoute(RoadGraph graph, Dijkstra<Intersection, Road> dijkstra,
             List<Intersection> intersections, Random random, Intersection origin) {
         List<Intersection> candidates = new ArrayList<>(intersections);

@@ -3,7 +3,6 @@ package com.astra.traffic;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Todo en rojo; al terminar se pone en verde {@code nextGreen}. */
 public record RedState(Axis nextGreen) implements LightState {
 
     public RedState {

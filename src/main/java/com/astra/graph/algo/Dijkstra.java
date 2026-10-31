@@ -12,10 +12,7 @@ import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.function.ToDoubleFunction;
 
-/**
- * Camino mínimo de Dijkstra en O((V + E) log V). No guarda estado entre llamadas, así que una
- * instancia es thread-safe y puede usarse desde varios hilos a la vez.
- */
+/** Camino mínimo en O((V + E) log V). Sin estado compartido: thread-safe. */
 public final class Dijkstra<V, E extends Edge<V>> {
 
     private record NodeDist<V>(V node, double dist) {
@@ -25,11 +22,7 @@ public final class Dijkstra<V, E extends Edge<V>> {
         return shortestPath(g, src, dst, Edge::weight);
     }
 
-    /**
-     * @return aristas del camino en orden; vacía si {@code src == dst} o no hay camino
-     * @throws IllegalArgumentException si {@code src} o {@code dst} no están en el grafo, o si
-     *                                  se recorre una arista con peso negativo o NaN
-     */
+    /** @return vacía si {@code src == dst} o no hay camino */
     public List<E> shortestPath(Graph<V, E> g, V src, V dst, ToDoubleFunction<? super E> weight) {
         Objects.requireNonNull(g, "graph");
         Objects.requireNonNull(weight, "weight");

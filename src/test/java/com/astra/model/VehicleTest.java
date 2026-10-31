@@ -18,7 +18,7 @@ class VehicleTest {
     private static final double DELTA = 1e-9;
     private static final double MAX_SPEED = 14;
     private static final double ACCELERATION = 3;
-    // La velocidad llega al tope en el primer update, así los cálculos son exactos.
+    // Llega al tope en el primer update.
     private static final double INSTANT_ACCELERATION = 1_000;
 
     private Intersection a;

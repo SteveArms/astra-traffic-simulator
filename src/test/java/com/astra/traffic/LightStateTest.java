@@ -15,7 +15,6 @@ class LightStateTest {
             implements LightTimings {
     }
 
-    // Valores distintos entre sí para saber de qué getter salió cada duración.
     private static final LightTimings TIMINGS =
             new FixedTimings(Duration.ofSeconds(7), Duration.ofSeconds(3), Duration.ofSeconds(1));
 

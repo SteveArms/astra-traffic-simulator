@@ -87,7 +87,6 @@ class DijkstraTest {
 
     @Test
     void customWeightChangesRoute() {
-        // Pesar cada arista con 1 convierte el problema en "menos saltos".
         List<TestEdge> path = new Dijkstra<String, TestEdge>().shortestPath(graph, "A", "E", e -> 1);
 
         assertEquals(List.of(ac, ce), path);

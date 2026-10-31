@@ -5,7 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Grafo vial con índice de intersecciones por id. Mismas reglas de concurrencia que {@link Graph}. */
+/** Grafo vial con búsqueda de intersecciones por id. */
 public final class RoadGraph extends Graph<Intersection, Road> {
 
     private static final String FORWARD_SUFFIX = "-F";
@@ -13,7 +13,6 @@ public final class RoadGraph extends Graph<Intersection, Road> {
 
     private final ConcurrentHashMap<String, Intersection> byId = new ConcurrentHashMap<>();
 
-    /** @throws IllegalArgumentException si ya existe otra intersección con el mismo id */
     @Override
     public boolean addVertex(Intersection intersection) {
         Objects.requireNonNull(intersection, "intersection");
@@ -28,7 +27,7 @@ public final class RoadGraph extends Graph<Intersection, Road> {
         return id == null ? Optional.empty() : Optional.ofNullable(byId.get(id));
     }
 
-    /** Crea {@code <baseId>-F} (a→b) y {@code <baseId>-B} (b→a) con la distancia euclidiana como longitud. */
+    /** Crea {@code <baseId>-F} (a→b) y {@code <baseId>-B} (b→a). */
     public List<Road> addTwoWayRoad(String baseId, Intersection a, Intersection b, double speedLimit, int lanes) {
         Objects.requireNonNull(a, "a");
         Objects.requireNonNull(b, "b");
@@ -41,7 +40,7 @@ public final class RoadGraph extends Graph<Intersection, Road> {
         Objects.requireNonNull(b, "b");
         var forward = new Road(baseId + FORWARD_SUFFIX, a, b, length, speedLimit, lanes);
         var backward = new Road(baseId + BACKWARD_SUFFIX, b, a, length, speedLimit, lanes);
-        // Validar ambos extremos antes de insertar para no dejar una calle de un solo sentido.
+        // Validar antes de insertar para no dejar un solo sentido agregado.
         if (!containsVertex(a) || !containsVertex(b)) {
             throw new IllegalArgumentException("Both intersections must be in the graph: " + a.id() + ", " + b.id());
         }

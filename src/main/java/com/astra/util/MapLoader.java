@@ -16,10 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Carga mapas JSON en un {@link RoadGraph}. Si una calle no trae {@code length} se usa la
- * distancia euclidiana entre sus intersecciones.
- */
+/** Carga mapas JSON en un {@link RoadGraph}. */
 public final class MapLoader {
 
     private static final String BASE_PATH = "/com/astra/";
@@ -41,7 +38,7 @@ public final class MapLoader {
     private MapLoader() {
     }
 
-    /** Rutas relativas se resuelven desde {@code /com/astra/}, por ejemplo {@code maps/city-3x3.json}. */
+    /** Las rutas relativas parten de {@code /com/astra/}. */
     public static LoadedMap load(String classpathResource) {
         String path = classpathResource.startsWith("/") ? classpathResource : BASE_PATH + classpathResource;
         try (InputStream in = MapLoader.class.getResourceAsStream(path)) {

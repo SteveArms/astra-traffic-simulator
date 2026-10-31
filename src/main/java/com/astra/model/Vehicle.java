@@ -8,8 +8,7 @@ import java.util.Objects;
 /**
  * Vehículo que recorre una ruta de vías consecutivas.
  *
- * @implNote El estado mutable lo modifica solo el hilo {@code astra-engine}; la vista recibe
- * copias inmutables mediante {@link #toView()}.
+ * @implNote Solo astra-engine modifica su estado; la vista usa {@link #toView()}.
  */
 public abstract class Vehicle {
 
@@ -35,7 +34,6 @@ public abstract class Vehicle {
         assignRoute(route);
     }
 
-    /** @throws IllegalArgumentException si la ruta está vacía o sus vías no son consecutivas */
     public final void assignRoute(List<Road> newRoute) {
         var copy = List.copyOf(newRoute);
         if (copy.isEmpty()) {
@@ -68,7 +66,6 @@ public abstract class Vehicle {
             }
             offset -= currentRoad().length();
             roadIndex++;
-            // La nueva vía puede tener un límite menor.
             speed = Math.min(speed, speedCap());
         }
     }

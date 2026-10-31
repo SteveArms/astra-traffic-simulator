@@ -6,13 +6,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Bucle de simulación de paso fijo en el hilo daemon {@code astra-engine}. Publica un
- * {@link WorldSnapshot} inmutable al final de cada tick.
- *
- * <p>{@code start}, {@code stop} y {@code step} están sincronizados entre sí, así que pueden
- * llamarse desde el FX Application Thread o desde un test.
- */
+/** Bucle de paso fijo en el hilo {@code astra-engine}; publica un {@link WorldSnapshot} por tick. */
 public final class SimulationEngine {
 
     public static final String THREAD_NAME = "astra-engine";
@@ -25,9 +19,8 @@ public final class SimulationEngine {
     private final double dtSeconds;
     private final AtomicReference<WorldSnapshot> latest = new AtomicReference<>(WorldSnapshot.EMPTY);
 
-    // volatile: isRunning() no toma el lock, así astra-engine puede consultarlo mientras stop() espera.
+    // volatile para que isRunning() no necesite el lock que stop() retiene.
     private volatile ScheduledExecutorService executor;
-    // Solo los modifica tick(): en astra-engine, o en el hilo de step() con el motor detenido.
     private long tick;
     private double simTimeSeconds;
 
@@ -37,12 +30,7 @@ public final class SimulationEngine {
         this.dtSeconds = tickMillis / MILLIS_PER_SECOND;
     }
 
-    /**
-     * Arranca el bucle. Tras {@link #stop()} se puede volver a arrancar.
-     *
-     * @throws IllegalStateException si ya está corriendo
-     * @implNote Called from the FX Application Thread or a test thread.
-     */
+    /** @implNote Called from the FX Application Thread. */
     public synchronized void start() {
         if (isRunning()) {
             throw new IllegalStateException("Engine is already running");
@@ -55,11 +43,7 @@ public final class SimulationEngine {
         executor.scheduleAtFixedRate(this::tickSafely, 0, tickMillis, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * Detiene el bucle y espera hasta 1 s a que termine el tick en curso. Es idempotente.
-     *
-     * @implNote Called from the FX Application Thread (AstraApp.stop) or a test thread.
-     */
+    /** @implNote Called from the FX Application Thread. */
     public synchronized void stop() {
         if (executor == null) {
             return;
@@ -73,12 +57,7 @@ public final class SimulationEngine {
         executor = null;
     }
 
-    /**
-     * Ejecuta un tick de forma síncrona en el hilo que llama.
-     *
-     * @throws IllegalStateException si el motor está corriendo
-     * @implNote Called from a test thread, or later from StepCmd while the engine is paused.
-     */
+    /** @implNote Called from tests or StepCmd while the engine is stopped. */
     public synchronized void step() {
         if (isRunning()) {
             throw new IllegalStateException("Cannot step while the engine is running");
@@ -92,7 +71,7 @@ public final class SimulationEngine {
         return current != null && !current.isShutdown();
     }
 
-    /** @implNote Safe to call from any thread; the FX AnimationTimer reads it every frame. */
+    /** @implNote Safe to call from any thread. */
     public WorldSnapshot latestSnapshot() {
         return latest.get();
     }
@@ -101,8 +80,7 @@ public final class SimulationEngine {
         try {
             tick();
         } catch (Throwable t) {
-            // Si la excepción escapara, scheduleAtFixedRate cancelaría el bucle sin avisar.
-            // TODO: registrar con SimLogger (Día 6).
+            // TODO: SimLogger (Día 6).
             System.err.println("[" + THREAD_NAME + "] tick " + tick + " failed: " + t);
             t.printStackTrace();
         }
