@@ -19,13 +19,18 @@ class SimConfigTest {
         assertEquals(Duration.ofMillis(50), config.tickMillis());
         assertEquals(Duration.ofSeconds(8), config.greenSeconds());
         assertEquals(Duration.ofSeconds(2), config.yellowSeconds());
-        assertEquals(Duration.ofSeconds(10), config.redSeconds());
+        assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
         assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
+        assertEquals(6, config.carDeceleration());
+        assertEquals(10, config.minGap());
+        assertEquals(14, config.stopLineOffset());
+        assertEquals(2, config.intersectionCapacity());
+        assertEquals(16, config.boxLength());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -39,13 +44,18 @@ class SimConfigTest {
         assertEquals(Duration.ofMillis(50), config.tickMillis());
         assertEquals(Duration.ofSeconds(8), config.greenSeconds());
         assertEquals(Duration.ofSeconds(2), config.yellowSeconds());
-        assertEquals(Duration.ofSeconds(10), config.redSeconds());
+        assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
         assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
+        assertEquals(6, config.carDeceleration());
+        assertEquals(10, config.minGap());
+        assertEquals(14, config.stopLineOffset());
+        assertEquals(2, config.intersectionCapacity());
+        assertEquals(16, config.boxLength());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -107,5 +117,18 @@ class SimConfigTest {
         props.setProperty(SimConfig.CAR_ACCELERATION, "2.5");
 
         assertEquals(2.5, SimConfig.from(props).carAcceleration());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        SimConfig.ALL_RED_SECONDS, SimConfig.CAR_DECELERATION, SimConfig.MIN_GAP,
+        SimConfig.STOP_LINE_OFFSET, SimConfig.INTERSECTION_CAPACITY, SimConfig.BOX_LENGTH
+    })
+    void newKeysRejectNonPositiveValues(String key) {
+        var props = new Properties();
+        props.setProperty(key, "0");
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(key), e.getMessage());
     }
 }
