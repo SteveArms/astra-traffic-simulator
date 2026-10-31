@@ -172,4 +172,36 @@ class DrivingTest {
         assertEquals(1, view.zoneOccupancy());
         assertEquals(cfg.intersectionCapacity(), view.zoneCapacity());
     }
+
+    @Test
+    void lastRoadAlsoStopsOnRed() {
+        build(SimConfig.load());
+        TestLights.force(light, new RedState(Axis.NS));
+        Vehicle car = addCar(westIn);
+
+        for (int i = 0; i < 500; i++) {
+            engine.step();
+            assertTrue(car.offset() <= stopLine(westIn) + EPS, "offset " + car.offset());
+        }
+        assertTrue(world.vehicles().contains(car));
+        assertEquals(0, zone.occupancy());
+
+        TestLights.force(light, new GreenState(Axis.EW));
+        stepUntil(() -> !world.vehicles().contains(car));
+        assertEquals(0, zone.occupancy());
+    }
+
+    @Test
+    void reroutedCarKeepsZoneUntilItLeavesTheBox() {
+        build(SimConfig.load());
+        TestLights.force(light, new GreenState(Axis.EW));
+        Vehicle car = addCar(westIn);
+        world.setOnVehicleFinished(vehicle -> vehicle.assignRoute(List.of(eastOut)));
+
+        stepUntil(() -> car.currentRoad().equals(eastOut));
+        assertTrue(zone.contains(car.id()), "zone released inside the box");
+
+        stepUntil(() -> car.offset() > cfg.boxLength());
+        assertEquals(0, zone.occupancy());
+    }
 }

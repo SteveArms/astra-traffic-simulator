@@ -81,8 +81,8 @@ public final class WorldState {
             vehicle.update(dtSeconds, freeDistance(vehicle, byRoad));
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
-                releaseAll(vehicle);
                 onVehicleFinished.accept(vehicle);
+                releaseAfterFinish(vehicle);
             }
             relocate(byRoad, vehicle, before);
         }
@@ -120,11 +120,7 @@ public final class WorldState {
 
     private double freeDistance(Vehicle vehicle, Map<Road, List<Vehicle>> byRoad) {
         double gapLeader = gapToLeader(vehicle, byRoad.get(vehicle.currentRoad()));
-        Optional<Road> next = vehicle.nextRoad();
-        double limit = next.isEmpty()
-                ? vehicle.remainingOnRoad()
-                : intersectionLimit(vehicle, next.get(), byRoad);
-        return Math.min(gapLeader, limit);
+        return Math.min(gapLeader, intersectionLimit(vehicle, vehicle.nextRoad(), byRoad));
     }
 
     private double gapToLeader(Vehicle vehicle, List<Vehicle> sameRoad) {
@@ -135,7 +131,8 @@ public final class WorldState {
         return sameRoad.get(index - 1).offset() - vehicle.offset() - minGap;
     }
 
-    private double intersectionLimit(Vehicle vehicle, Road next, Map<Road, List<Vehicle>> byRoad) {
+    // También en la última vía: el destino es el centro de la intersección, así que respeta luz y zona.
+    private double intersectionLimit(Vehicle vehicle, Optional<Road> next, Map<Road, List<Vehicle>> byRoad) {
         Road road = vehicle.currentRoad();
         double toLine = vehicle.remainingOnRoad() - stopLineOffset;
         IntersectionZone zone = zones.zoneOf(road.to());
@@ -145,7 +142,7 @@ public final class WorldState {
                 return toLine;
             }
         }
-        double space = spaceOn(next, byRoad);
+        double space = next.map(nextRoad -> spaceOn(nextRoad, byRoad)).orElse(0.0);
         if (space < 0 || !zone.tryEnter(vehicle.id())) {
             return toLine;
         }
@@ -175,6 +172,16 @@ public final class WorldState {
                 && vehicle.offset() > boxLength) {
             zone.leave(vehicle.id());
             held.remove(vehicle.id());
+        }
+    }
+
+    // Si la ruta nueva sale de la intersección donde terminó, conserva la zona hasta dejar el box.
+    private void releaseAfterFinish(Vehicle vehicle) {
+        IntersectionZone zone = held.get(vehicle.id());
+        boolean continuesFromZone = !vehicle.isFinished() && zone != null
+                && zone.intersection().equals(vehicle.currentRoad().from());
+        if (!continuesFromZone) {
+            releaseAll(vehicle);
         }
     }
 

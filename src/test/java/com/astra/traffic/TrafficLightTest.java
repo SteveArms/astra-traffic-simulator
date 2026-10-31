@@ -46,7 +46,7 @@ class TrafficLightTest {
         controller.start();
         Thread.sleep(1_000);
 
-        assertEquals(9, controller.lights().size());
+        assertEquals(5, controller.lights().size());
         for (TrafficLight light : controller.lights()) {
             assertTrue(light.transitions() > 3, light.intersection().id() + ": " + light.transitions());
         }
@@ -92,12 +92,14 @@ class TrafficLightTest {
     @Test
     void adjacentIntersectionsStartWithOppositeAxes() {
         for (Road road : graph.edges()) {
-            LightState from = controller.lightAt(road.from()).orElseThrow().state();
-            LightState to = controller.lightAt(road.to()).orElseThrow().state();
-            assertNotEquals(from, to, road.id());
+            var from = controller.lightAt(road.from());
+            var to = controller.lightAt(road.to());
+            if (from.isPresent() && to.isPresent()) {
+                assertNotEquals(from.get().state(), to.get().state(), road.id());
+            }
         }
-        assertEquals(new GreenState(Axis.NS), lightAt("I00").state());
         assertEquals(new GreenState(Axis.EW), lightAt("I01").state());
+        assertEquals(new GreenState(Axis.EW), lightAt("I10").state());
         assertEquals(new GreenState(Axis.NS), lightAt("I11").state());
     }
 
@@ -112,10 +114,23 @@ class TrafficLightTest {
         assertEquals(LightColor.GREEN, controller.colorFor(eastbound));
         assertTrue(controller.canEnter(southbound));
 
-        Road westIntoI00 = graph.edges().stream()
-                .filter(r -> r.from().id().equals("I01") && r.to().id().equals("I00")).findFirst().orElseThrow();
-        assertFalse(controller.canEnter(westIntoI00));
-        assertEquals(LightColor.RED, controller.colorFor(westIntoI00));
+        Road eastIntoI11 = road("I10", "I11");
+        assertFalse(controller.canEnter(eastIntoI11));
+        assertEquals(LightColor.RED, controller.colorFor(eastIntoI11));
+
+        Road intoCorner = road("I01", "I00");
+        assertTrue(controller.canEnter(intoCorner));
+        assertEquals(LightColor.GREEN, controller.colorFor(intoCorner));
+    }
+
+    @Test
+    void cornersHaveNoLightButEdgesAndCenterDo() {
+        for (String corner : List.of("I00", "I02", "I20", "I22")) {
+            assertTrue(controller.lightAt(graph.findIntersection(corner).orElseThrow()).isEmpty(), corner);
+        }
+        for (String id : List.of("I01", "I10", "I11", "I12", "I21")) {
+            assertTrue(controller.lightAt(graph.findIntersection(id).orElseThrow()).isPresent(), id);
+        }
     }
 
     @Test
@@ -134,6 +149,11 @@ class TrafficLightTest {
         assertTrue(straight.lightAt(b).isEmpty());
         assertTrue(straight.canEnter(bc));
         assertEquals(LightColor.GREEN, straight.colorFor(bc));
+    }
+
+    private Road road(String from, String to) {
+        return graph.edges().stream()
+                .filter(r -> r.from().id().equals(from) && r.to().id().equals(to)).findFirst().orElseThrow();
     }
 
     private TrafficLight lightAt(String id) {
