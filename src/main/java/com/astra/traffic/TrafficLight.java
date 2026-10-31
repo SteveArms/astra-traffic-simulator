@@ -47,6 +47,11 @@ public final class TrafficLight {
         return intersection;
     }
 
+    /** Solo para tests, con el controlador detenido. */
+    void forceState(LightState forced) {
+        state.set(Objects.requireNonNull(forced, "forced"));
+    }
+
     /** @implNote Called from LightController.start(), then from astra-lights-N. */
     public void scheduleNext(ScheduledExecutorService ex) {
         executor = Objects.requireNonNull(ex, "executor");

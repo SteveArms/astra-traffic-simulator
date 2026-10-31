@@ -34,7 +34,7 @@ public final class DemoScenario {
             Intersection origin = origins.get(i % origins.size());
             List<Road> route = randomRoute(graph, dijkstra, intersections, random, origin)
                     .orElseThrow(() -> new IllegalStateException("No route from " + origin.id()));
-            world.addVehicle(new Car(route, cfg.carMaxSpeed(), cfg.carAcceleration()));
+            world.addVehicle(new Car(route, cfg.carMaxSpeed(), cfg.carAcceleration(), cfg.carDeceleration()));
         }
 
         world.setOnVehicleFinished(vehicle -> reroute(vehicle, graph, dijkstra, intersections, random));

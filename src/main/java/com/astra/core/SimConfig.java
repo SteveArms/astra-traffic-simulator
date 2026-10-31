@@ -35,6 +35,7 @@ public final class SimConfig implements LightTimings {
     static final String STOP_LINE_OFFSET = "intersection.stopLineOffset";
     static final String INTERSECTION_CAPACITY = "intersection.capacity";
     static final String BOX_LENGTH = "intersection.boxLength";
+    static final String APPROACH_MARGIN = "intersection.approachMargin";
     static final String DEMO_CAR_COUNT = "demo.carCount";
     static final String DEMO_SEED = "demo.seed";
     static final String MAP_FILE = "map.file";
@@ -56,6 +57,7 @@ public final class SimConfig implements LightTimings {
     private static final double DEFAULT_STOP_LINE_OFFSET = 14;
     private static final int DEFAULT_INTERSECTION_CAPACITY = 2;
     private static final double DEFAULT_BOX_LENGTH = 16;
+    private static final double DEFAULT_APPROACH_MARGIN = 2;
     private static final int DEFAULT_DEMO_CAR_COUNT = 4;
     private static final long DEFAULT_DEMO_SEED = 42;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
@@ -76,6 +78,7 @@ public final class SimConfig implements LightTimings {
     private final double stopLineOffset;
     private final int intersectionCapacity;
     private final double boxLength;
+    private final double approachMargin;
     private final int demoCarCount;
     private final long demoSeed;
     private final String mapFile;
@@ -99,6 +102,7 @@ public final class SimConfig implements LightTimings {
         stopLineOffset = positiveDouble(p, STOP_LINE_OFFSET, DEFAULT_STOP_LINE_OFFSET);
         intersectionCapacity = positiveInt(p, INTERSECTION_CAPACITY, DEFAULT_INTERSECTION_CAPACITY);
         boxLength = positiveDouble(p, BOX_LENGTH, DEFAULT_BOX_LENGTH);
+        approachMargin = positiveDouble(p, APPROACH_MARGIN, DEFAULT_APPROACH_MARGIN);
         demoCarCount = positiveInt(p, DEMO_CAR_COUNT, DEFAULT_DEMO_CAR_COUNT);
         demoSeed = positiveLong(p, DEMO_SEED, DEFAULT_DEMO_SEED);
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
@@ -190,6 +194,10 @@ public final class SimConfig implements LightTimings {
 
     public double boxLength() {
         return boxLength;
+    }
+
+    public double approachMargin() {
+        return approachMargin;
     }
 
     public int demoCarCount() {

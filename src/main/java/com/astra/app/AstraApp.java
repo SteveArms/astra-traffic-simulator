@@ -1,9 +1,11 @@
 package com.astra.app;
 
 import com.astra.core.DemoScenario;
+import com.astra.core.IntersectionZones;
 import com.astra.core.SimConfig;
 import com.astra.core.SimulationEngine;
 import com.astra.core.WorldState;
+import com.astra.traffic.LightController;
 import com.astra.util.MapLoader;
 import com.astra.view.CityRenderer;
 import javafx.application.Application;
@@ -17,6 +19,7 @@ public final class AstraApp extends Application {
     private static final double WINDOW_WIDTH = 1100;
     private static final double WINDOW_HEIGHT = 700;
 
+    private LightController lights;
     private SimulationEngine engine;
     private CityRenderer renderer;
 
@@ -24,7 +27,8 @@ public final class AstraApp extends Application {
     public void start(Stage stage) {
         SimConfig config = SimConfig.load();
         MapLoader.LoadedMap map = MapLoader.load(config.mapFile());
-        var world = new WorldState(map.graph());
+        lights = new LightController(map.graph(), config);
+        var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config));
         DemoScenario.seed(world, config, config.demoSeed());
         engine = new SimulationEngine(config, world);
         renderer = new CityRenderer(map.graph(), engine::latestSnapshot);
@@ -35,6 +39,7 @@ public final class AstraApp extends Application {
         stage.setScene(new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT));
         stage.show();
 
+        lights.start();
         engine.start();
         renderer.start();
     }
@@ -46,6 +51,9 @@ public final class AstraApp extends Application {
         }
         if (engine != null) {
             engine.stop();
+        }
+        if (lights != null) {
+            lights.stop();
         }
     }
 

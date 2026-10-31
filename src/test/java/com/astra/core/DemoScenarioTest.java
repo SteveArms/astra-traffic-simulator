@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.astra.model.Vehicle;
+import com.astra.traffic.LightController;
 import com.astra.util.MapLoader;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +22,8 @@ class DemoScenarioTest {
     @BeforeEach
     void setUp() {
         config = SimConfig.load();
-        world = new WorldState(MapLoader.load(config.mapFile()).graph());
+        var graph = MapLoader.load(config.mapFile()).graph();
+        world = new WorldState(graph, config, new LightController(graph, config), new IntersectionZones(graph, config));
         DemoScenario.seed(world, config, SEED);
     }
 

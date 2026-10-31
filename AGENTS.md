@@ -203,6 +203,7 @@ vehicle.minGap=10
 intersection.stopLineOffset=14
 intersection.capacity=2
 intersection.boxLength=16
+intersection.approachMargin=2
 demo.carCount=4
 demo.seed=42
 map.file=maps/city-3x3.json
@@ -219,6 +220,8 @@ log.file=logs/astra.log
   intersección (px).
 - `intersection.capacity`: vehículos que pueden estar a la vez dentro de una intersección.
 - `intersection.boxLength`: largo de la zona de conflicto que se considera "dentro" (px).
+- `intersection.approachMargin`: margen extra antes de la línea de detención a partir del cual un
+  vehículo intenta reservar la zona (px); evita reservarla desde lejos.
 - `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
 
 ---
