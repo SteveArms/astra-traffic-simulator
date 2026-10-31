@@ -27,6 +27,7 @@ class SimConfigTest {
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
         assertEquals(4, config.demoCarCount());
+        assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }
@@ -46,6 +47,7 @@ class SimConfigTest {
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
         assertEquals(4, config.demoCarCount());
+        assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }

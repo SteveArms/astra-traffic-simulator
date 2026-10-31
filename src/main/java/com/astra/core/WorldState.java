@@ -4,6 +4,7 @@ import com.astra.graph.RoadGraph;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleView;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -70,5 +71,14 @@ public final class WorldState {
     /** @implNote Called from astra-engine. */
     public int vehicleCount() {
         return vehicles.size();
+    }
+
+    /**
+     * Vista de solo lectura.
+     *
+     * @implNote Called from astra-engine, or from tests with the engine stopped.
+     */
+    public List<Vehicle> vehicles() {
+        return Collections.unmodifiableList(vehicles);
     }
 }
