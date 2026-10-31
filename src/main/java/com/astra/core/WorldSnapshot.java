@@ -1,5 +1,6 @@
 package com.astra.core;
 
+import com.astra.model.VehicleView;
 import java.util.List;
 
 /**

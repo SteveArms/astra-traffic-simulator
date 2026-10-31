@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.model.VehicleKind;
+import com.astra.model.VehicleView;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
