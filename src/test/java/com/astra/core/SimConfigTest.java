@@ -32,6 +32,8 @@ class SimConfigTest {
         assertEquals(2, config.intersectionCapacity());
         assertEquals(16, config.boxLength());
         assertEquals(2, config.approachMargin());
+        assertEquals(2.0, config.congestionFactor());
+        assertEquals(0.6, config.randomJitter());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -58,6 +60,8 @@ class SimConfigTest {
         assertEquals(2, config.intersectionCapacity());
         assertEquals(16, config.boxLength());
         assertEquals(2, config.approachMargin());
+        assertEquals(2.0, config.congestionFactor());
+        assertEquals(0.6, config.randomJitter());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -125,7 +129,7 @@ class SimConfigTest {
     @ValueSource(strings = {
         SimConfig.ALL_RED_SECONDS, SimConfig.CAR_DECELERATION, SimConfig.MIN_GAP,
         SimConfig.STOP_LINE_OFFSET, SimConfig.INTERSECTION_CAPACITY, SimConfig.BOX_LENGTH,
-        SimConfig.APPROACH_MARGIN
+        SimConfig.APPROACH_MARGIN, SimConfig.ROUTING_CONGESTION_FACTOR, SimConfig.ROUTING_RANDOM_JITTER
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();

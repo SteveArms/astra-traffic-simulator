@@ -75,7 +75,8 @@ astra-traffic-simulator/
     │       ├── traffic/      TrafficLight, LightState, GreenState, YellowState, RedState,
     │       │                 SmartAdaptiveState, LightController
     │       ├── routing/      RouteStrategy, ShortestDistanceStrategy,
-    │       │                 LeastCongestedStrategy, RandomRouteStrategy
+    │       │                 LeastCongestedStrategy, RandomRouteStrategy,
+    │       │                 RouteStrategies, RoadOccupancy, RoutingSettings
     │       ├── command/      Command, CommandBus, PauseCmd, ResumeCmd, StepCmd,
     │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd
     │       ├── events/       SimEvent, EventQueue
@@ -148,7 +149,10 @@ public interface LightState {
 // Strategy
 public interface RouteStrategy {
     List<Road> route(Graph<Intersection, Road> graph, Intersection from, Intersection to);
+    String name();                              // "SHORTEST", "LEAST_CONGESTED", "RANDOM"
+    default boolean isAdaptive() { return false; }   // true = recalcula en cada intersección
 }
+public interface RoutingSettings { double congestionFactor(); double randomJitter(); }
 
 // Command
 public interface Command {
@@ -166,6 +170,8 @@ public class Dijkstra<V, E extends Edge<V>> {
 - Un nuevo comportamiento de semáforo = una nueva clase `LightState`. **No** usar `switch`
   sobre colores en `TrafficLight`: cada estado decide su color por eje.
 - `traffic` no depende de `core`: recibe las duraciones a través de `LightTimings`.
+- `routing` solo depende de `graph`: recibe sus parámetros a través de `RoutingSettings`
+  (`SimConfig` la implementa) y la ocupación de las vías a través de `RoadOccupancy`.
 - Una nueva forma de enrutar = una nueva `RouteStrategy`. **No** meter `if` en `Vehicle`.
 - Una nueva acción de usuario = un nuevo `Command`.
 
@@ -204,6 +210,8 @@ intersection.stopLineOffset=14
 intersection.capacity=2
 intersection.boxLength=16
 intersection.approachMargin=2
+routing.congestionFactor=2.0
+routing.randomJitter=0.6
 demo.carCount=4
 demo.seed=42
 map.file=maps/city-3x3.json
@@ -222,6 +230,10 @@ log.file=logs/astra.log
 - `intersection.boxLength`: largo de la zona de conflicto que se considera "dentro" (px).
 - `intersection.approachMargin`: margen extra antes de la línea de detención a partir del cual un
   vehículo intenta reservar la zona (px); evita reservarla desde lejos.
+- `routing.congestionFactor`: penalización de `LeastCongestedStrategy`; el peso de una vía es
+  `length * (1 + congestionFactor * ocupación)`, con ocupación entre 0 y 1.
+- `routing.randomJitter`: variación máxima de `RandomRouteStrategy`; el peso de una vía es
+  `length * (1 + U[0,1) * randomJitter)`, sorteado una vez por cálculo de ruta.
 - `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
 
 ---
