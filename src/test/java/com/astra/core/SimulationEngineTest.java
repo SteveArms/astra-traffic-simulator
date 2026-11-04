@@ -10,8 +10,9 @@ import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.Car;
 import com.astra.model.Vehicle;
+import com.astra.model.VehicleSpec;
+import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightController;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +27,7 @@ class SimulationEngineTest {
     private static final double MAX_SPEED = 14;
     private static final double ACCELERATION = 3;
     private static final double DECELERATION = 6;
+    private static final double LENGTH = 12;
 
     private Road longRoad;
     private Road shortRoad;
@@ -55,7 +57,7 @@ class SimulationEngineTest {
 
     @Test
     void stepAdvancesTickAndMovesVehicle() {
-        Vehicle car = new Car(List.of(longRoad), MAX_SPEED, ACCELERATION, DECELERATION);
+        Vehicle car = car(longRoad, ACCELERATION);
         world.addVehicle(car);
         int steps = 20;
 
@@ -100,27 +102,29 @@ class SimulationEngineTest {
     }
 
     @Test
-    void finishedVehicleIsRemovedUnlessHookAssignsNewRoute() {
-        Vehicle leaving = new Car(List.of(shortRoad), MAX_SPEED, 1_000, DECELERATION);
-        Vehicle looping = new Car(List.of(shortRoad), MAX_SPEED, 1_000, DECELERATION);
-        List<Vehicle> finished = new ArrayList<>();
-        world.setOnVehicleFinished(vehicle -> {
-            finished.add(vehicle);
-            if (vehicle == looping) {
-                vehicle.assignRoute(List.of(longRoad));
-            }
-        });
-        world.addVehicle(leaving);
-        world.addVehicle(looping);
+    void finishedVehiclesAreRemovedAndCounted() {
+        Vehicle staying = car(longRoad, ACCELERATION);
+        world.addVehicle(car(shortRoad, 1_000));
+        world.addVehicle(car(shortRoad, 1_000));
+        world.addVehicle(staying);
 
-        // Con minGap, looping espera a que leaving salga de la vía.
+        // Con minGap, el segundo espera a que el primero salga de la vía.
         for (int i = 0; i < 100; i++) {
             engine.step();
         }
 
-        assertEquals(List.of(leaving, looping), finished);
-        assertEquals(1, engine.latestSnapshot().vehicleCount());
-        assertEquals(looping.id(), engine.latestSnapshot().vehicles().get(0).id());
+        WorldSnapshot snapshot = engine.latestSnapshot();
+        assertEquals(3, snapshot.spawned());
+        assertEquals(2, snapshot.despawned());
+        assertEquals(1, snapshot.vehicleCount());
+        assertEquals(staying.id(), snapshot.vehicles().get(0).id());
+    }
+
+    private static Vehicle car(Road road, double acceleration) {
+        var spec = new VehicleSpec(MAX_SPEED, acceleration, DECELERATION, LENGTH);
+        var car = new Car(spec, new ShortestDistanceStrategy(), road.from(), road.to());
+        car.assignRoute(List.of(road));
+        return car;
     }
 
     // El hilo tarda unos ms en morir tras awaitTermination.

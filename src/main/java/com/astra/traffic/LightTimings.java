@@ -10,4 +10,7 @@ public interface LightTimings {
     Duration yellowSeconds();
 
     Duration allRedSeconds();
+
+    /** Límite de seguridad de {@link EmergencyState} si nadie lo libera antes. */
+    Duration emergencyMaxSeconds();
 }

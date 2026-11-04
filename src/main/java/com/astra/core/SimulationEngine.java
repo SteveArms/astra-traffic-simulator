@@ -6,7 +6,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Bucle de paso fijo en el hilo {@code astra-engine}; publica un {@link WorldSnapshot} por tick. */
+/**
+ * Bucle de paso fijo en el hilo {@code astra-engine}: genera vehículos, actualiza el mundo y publica un
+ * {@link WorldSnapshot} por tick.
+ */
 public final class SimulationEngine {
 
     public static final String THREAD_NAME = "astra-engine";
@@ -25,7 +28,15 @@ public final class SimulationEngine {
     private double simTimeSeconds;
 
     public SimulationEngine(SimConfig config, WorldState world) {
+        this(config, world, null);
+    }
+
+    /** Conecta el spawner al mundo: corre en la fase COMMIT de cada tick. */
+    public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner) {
         this.world = Objects.requireNonNull(world, "world");
+        if (spawner != null) {
+            world.setSpawner(spawner);
+        }
         this.tickMillis = config.tickMillis().toMillis();
         this.dtSeconds = tickMillis / MILLIS_PER_SECOND;
     }
@@ -43,18 +54,18 @@ public final class SimulationEngine {
         executor.scheduleAtFixedRate(this::tickSafely, 0, tickMillis, TimeUnit.MILLISECONDS);
     }
 
-    /** @implNote Called from the FX Application Thread. */
+    /** Detiene astra-engine y después los astra-worker-N. @implNote Called from the FX Application Thread. */
     public synchronized void stop() {
-        if (executor == null) {
-            return;
+        if (executor != null) {
+            executor.shutdownNow();
+            try {
+                executor.awaitTermination(STOP_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            executor = null;
         }
-        executor.shutdownNow();
-        try {
-            executor.awaitTermination(STOP_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        executor = null;
+        world.shutdown();
     }
 
     /** @implNote Called from tests or StepCmd while the engine is stopped. */
@@ -80,6 +91,10 @@ public final class SimulationEngine {
         try {
             tick();
         } catch (Throwable t) {
+            if (Thread.currentThread().isInterrupted()) {
+                // stop() interrumpió el tick a mitad de una fase: no es un fallo.
+                return;
+            }
             // TODO: SimLogger (Día 6).
             System.err.println("[" + THREAD_NAME + "] tick " + tick + " failed: " + t);
             t.printStackTrace();

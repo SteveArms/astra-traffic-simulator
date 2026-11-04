@@ -22,6 +22,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 /**
@@ -39,8 +40,14 @@ public final class CityRenderer extends StackPane {
     private static final double LABEL_GAP = 4;
     private static final Font LABEL_FONT = Font.font("System", 12);
 
-    private static final double VEHICLE_LENGTH = 12;
-    private static final double VEHICLE_WIDTH = 6;
+    private static final double CAR_WIDTH = 6;
+    private static final double BUS_WIDTH = 7;
+    private static final double AMBULANCE_WIDTH = 7;
+    private static final double AMBULANCE_STRIPE_WIDTH = 3;
+    // Dos destellos por segundo, por debajo del umbral de 3 por segundo. Sigue el tiempo simulado: con la
+    // simulación en pausa deja de parpadear.
+    private static final long AMBULANCE_BLINK_MILLIS = 250;
+    private static final double MILLIS_PER_SECOND = 1_000.0;
     private static final double VEHICLE_RIGHT_OFFSET = 5;
     private static final double OUTLINE_WIDTH = 1;
 
@@ -52,7 +59,6 @@ public final class CityRenderer extends StackPane {
     private static final double HUD_MARGIN = 8;
     private static final double HUD_PADDING = 8;
     private static final double HUD_LINE_HEIGHT = 16;
-    private static final double HUD_WIDTH = 144;
     private static final double HUD_RADIUS = 6;
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final int SECONDS_PER_MINUTE = 60;
@@ -70,7 +76,9 @@ public final class CityRenderer extends StackPane {
     private static final Color HUD_TEXT = Color.web("#F3F4F6");
     private static final Color CAR = Color.web("#93C5FD");
     private static final Color BUS = Color.web("#FCD34D");
-    private static final Color AMBULANCE = Color.web("#FCA5A5");
+    private static final Color AMBULANCE = Color.web("#F9FAFB");
+    // 4.6:1 contra el blanco de la ambulancia.
+    private static final Color AMBULANCE_STRIPE = Color.web("#DC2626");
     private static final Color LIGHT_GREEN = Color.web("#4ADE80");
     private static final Color LIGHT_YELLOW = Color.web("#FACC15");
     private static final Color LIGHT_RED = Color.web("#F87171");
@@ -81,6 +89,7 @@ public final class CityRenderer extends StackPane {
     private final Canvas staticLayer = new Canvas();
     private final Canvas dynamicLayer = new Canvas();
     private final AnimationTimer timer;
+    private final Text measure = new Text();
 
     private double offsetX;
     private double offsetY;
@@ -194,8 +203,9 @@ public final class CityRenderer extends StackPane {
             drawZone(gc, light);
             drawLight(gc, light);
         }
+        boolean stripeOn = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / AMBULANCE_BLINK_MILLIS) % 2 == 0;
         for (VehicleView vehicle : snapshot.vehicles()) {
-            drawVehicle(gc, vehicle);
+            drawVehicle(gc, vehicle, stripeOn);
         }
         gc.restore();
         drawHud(gc, snapshot);
@@ -280,7 +290,7 @@ public final class CityRenderer extends StackPane {
         };
     }
 
-    private void drawVehicle(GraphicsContext gc, VehicleView vehicle) {
+    private void drawVehicle(GraphicsContext gc, VehicleView vehicle, boolean stripeOn) {
         double heading = vehicle.headingRad();
         // Normal derecha con y hacia abajo.
         double x = vehicle.x() - Math.sin(heading) * VEHICLE_RIGHT_OFFSET;
@@ -289,11 +299,26 @@ public final class CityRenderer extends StackPane {
         gc.translate(x, y);
         gc.rotate(Math.toDegrees(heading));
         gc.setFill(colorOf(vehicle.kind()));
-        gc.fillRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
+        // (x, y) es el parachoques delantero: el cuerpo se extiende hacia atrás.
+        double length = vehicle.length();
+        double width = widthOf(vehicle.kind());
+        gc.fillRect(-length, -width / 2, length, width);
+        if (vehicle.kind() == VehicleKind.AMBULANCE && stripeOn) {
+            gc.setFill(AMBULANCE_STRIPE);
+            gc.fillRect(-(length + AMBULANCE_STRIPE_WIDTH) / 2, -width / 2, AMBULANCE_STRIPE_WIDTH, width);
+        }
         gc.setStroke(OUTLINE);
         gc.setLineWidth(OUTLINE_WIDTH);
-        gc.strokeRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
+        gc.strokeRect(-length, -width / 2, length, width);
         gc.restore();
+    }
+
+    private static double widthOf(VehicleKind kind) {
+        return switch (kind) {
+            case CAR -> CAR_WIDTH;
+            case BUS -> BUS_WIDTH;
+            case AMBULANCE -> AMBULANCE_WIDTH;
+        };
     }
 
     private static Color colorOf(VehicleKind kind) {
@@ -312,10 +337,14 @@ public final class CityRenderer extends StackPane {
             "Vehículos %d".formatted(snapshot.vehicleCount()),
             "Semáforos %d".formatted(snapshot.lightCount()),
             "FPS       %d".formatted(fps),
+            "Autos: %d  Buses: %d  Ambulancias: %d  |  Generados: %d  Salidos: %d".formatted(
+                    snapshot.activeCount(VehicleKind.CAR), snapshot.activeCount(VehicleKind.BUS),
+                    snapshot.activeCount(VehicleKind.AMBULANCE), snapshot.spawned(), snapshot.despawned()),
         };
         double height = lines.length * HUD_LINE_HEIGHT + 2 * HUD_PADDING;
+        double width = widestLine(lines) + 2 * HUD_PADDING;
         gc.setFill(HUD_SURFACE);
-        gc.fillRoundRect(HUD_MARGIN, HUD_MARGIN, HUD_WIDTH, height, HUD_RADIUS * 2, HUD_RADIUS * 2);
+        gc.fillRoundRect(HUD_MARGIN, HUD_MARGIN, width, height, HUD_RADIUS * 2, HUD_RADIUS * 2);
 
         gc.setFill(HUD_TEXT);
         gc.setFont(HUD_FONT);
@@ -324,6 +353,16 @@ public final class CityRenderer extends StackPane {
         for (int i = 0; i < lines.length; i++) {
             gc.fillText(lines[i], HUD_MARGIN + HUD_PADDING, HUD_MARGIN + HUD_PADDING + i * HUD_LINE_HEIGHT);
         }
+    }
+
+    private double widestLine(String[] lines) {
+        measure.setFont(HUD_FONT);
+        double widest = 0;
+        for (String line : lines) {
+            measure.setText(line);
+            widest = Math.max(widest, measure.getLayoutBounds().getWidth());
+        }
+        return Math.ceil(widest);
     }
 
     private void updateFps(long now) {

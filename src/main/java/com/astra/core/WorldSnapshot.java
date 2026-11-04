@@ -1,16 +1,26 @@
 package com.astra.core;
 
+import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
 import java.util.List;
+import java.util.Map;
 
-/** Foto inmutable del mundo: la produce astra-engine y la lee el FX Thread sin sincronizar. */
-public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights) {
+/**
+ * Foto inmutable del mundo: la produce astra-engine y la lee el FX Thread sin sincronizar.
+ *
+ * @param spawned      vehículos agregados desde el inicio
+ * @param despawned    vehículos que terminaron su ruta y salieron
+ * @param activeByKind vehículos en circulación por tipo
+ */
+public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights,
+        long spawned, long despawned, Map<VehicleKind, Integer> activeByKind) {
 
-    public static final WorldSnapshot EMPTY = new WorldSnapshot(0, 0, List.of(), List.of());
+    public static final WorldSnapshot EMPTY = new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of());
 
     public WorldSnapshot {
         vehicles = List.copyOf(vehicles);
         lights = List.copyOf(lights);
+        activeByKind = Map.copyOf(activeByKind);
     }
 
     public int vehicleCount() {
@@ -19,5 +29,10 @@ public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> 
 
     public int lightCount() {
         return lights.size();
+    }
+
+    /** @return 0 si no hay vehículos de ese tipo */
+    public int activeCount(VehicleKind kind) {
+        return activeByKind.getOrDefault(kind, 0);
     }
 }

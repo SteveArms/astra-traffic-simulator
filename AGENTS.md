@@ -68,14 +68,16 @@ astra-traffic-simulator/
     │   └── com/astra/
     │       ├── app/          AstraApp, MainController
     │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, PauseGate,
-    │       │                 SimConfig, VehicleSpawner
+    │       │                 SimConfig, VehicleSpawner, ParallelUpdater
     │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, Road, RoadGraph
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
-    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane
+    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
+    │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
     │       ├── traffic/      TrafficLight, LightState, GreenState, YellowState, RedState,
-    │       │                 SmartAdaptiveState, LightController
+    │       │                 SmartAdaptiveState, EmergencyState, LightController
     │       ├── routing/      RouteStrategy, ShortestDistanceStrategy,
-    │       │                 LeastCongestedStrategy, RandomRouteStrategy
+    │       │                 LeastCongestedStrategy, RandomRouteStrategy,
+    │       │                 RouteStrategies, RoadOccupancy, RoutingSettings
     │       ├── command/      Command, CommandBus, PauseCmd, ResumeCmd, StepCmd,
     │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd
     │       ├── events/       SimEvent, EventQueue
@@ -95,6 +97,7 @@ Reglas de dependencia entre paquetes:
 - `core`, `model`, `traffic`, `routing`, `graph`, `distributed` **no importan `javafx.*`**
   (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
 - `graph` no conoce `model` ni `traffic`: es genérico.
+- `model` solo depende de `graph` y `routing`.
 
 ---
 
@@ -136,7 +139,10 @@ Reglas:
 // Ciclo: GreenState(NS) → YellowState(NS) → RedState(EW) → GreenState(EW) → YellowState(EW)
 //        → RedState(NS) → …   (RedState(x) = todo en rojo; después se pone en verde x)
 public enum Axis { NS, EW; Axis opposite(); static Axis of(Road road); }
-public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds(); }
+public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds();
+                                Duration emergencyMaxSeconds(); }
+// Emergencia: TrafficLight.preempt(axis, id) → EmergencyState(axis) (axis verde, el otro rojo) hasta que el
+// último vehículo llama a release(id) → YellowState(axis) → ciclo normal.
 public interface LightState {
     LightColor colorFor(Axis axis);
     Duration duration(LightTimings timings);   // SimConfig implementa LightTimings
@@ -148,7 +154,10 @@ public interface LightState {
 // Strategy
 public interface RouteStrategy {
     List<Road> route(Graph<Intersection, Road> graph, Intersection from, Intersection to);
+    String name();                              // "SHORTEST", "LEAST_CONGESTED", "RANDOM"
+    default boolean isAdaptive() { return false; }   // true = recalcula en cada intersección
 }
+public interface RoutingSettings { double congestionFactor(); double randomJitter(); }
 
 // Command
 public interface Command {
@@ -166,6 +175,8 @@ public class Dijkstra<V, E extends Edge<V>> {
 - Un nuevo comportamiento de semáforo = una nueva clase `LightState`. **No** usar `switch`
   sobre colores en `TrafficLight`: cada estado decide su color por eje.
 - `traffic` no depende de `core`: recibe las duraciones a través de `LightTimings`.
+- `routing` solo depende de `graph`: recibe sus parámetros a través de `RoutingSettings`
+  (`SimConfig` la implementa) y la ocupación de las vías a través de `RoadOccupancy`.
 - Una nueva forma de enrutar = una nueva `RouteStrategy`. **No** meter `if` en `Vehicle`.
 - Una nueva acción de usuario = un nuevo `Command`.
 
@@ -189,40 +200,81 @@ Ningún número mágico en el código. Todo en `config.properties` leído por `S
 
 ```properties
 engine.tickMillis=50
+engine.parallel=true
+engine.workers=4
 lights.greenSeconds=8
 lights.yellowSeconds=2
 lights.allRedSeconds=1
 smart.queueThreshold=5
 smart.maxExtensionSeconds=6
-spawn.intervalMillis=1500
+spawn.intervalMillis=300
+spawn.seed=42
+spawn.weight.car=0.75
+spawn.weight.bus=0.20
+spawn.weight.ambulance=0.05
 vehicle.maxCount=150
 vehicle.car.maxSpeed=14
 vehicle.car.acceleration=3
 vehicle.car.deceleration=6
+vehicle.car.length=12
+vehicle.bus.maxSpeed=9
+vehicle.bus.acceleration=1.5
+vehicle.bus.deceleration=4
+vehicle.bus.length=20
+vehicle.ambulance.maxSpeed=20
+vehicle.ambulance.acceleration=4
+vehicle.ambulance.deceleration=8
+vehicle.ambulance.length=14
 vehicle.minGap=10
 intersection.stopLineOffset=14
 intersection.capacity=2
 intersection.boxLength=16
 intersection.approachMargin=2
-demo.carCount=4
-demo.seed=42
+routing.congestionFactor=2.0
+routing.randomJitter=0.6
+routing.weight.shortest=0.5
+routing.weight.leastCongested=0.3
+routing.weight.random=0.2
+emergency.preemptDistance=80
+emergency.maxSeconds=30
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
 ```
 
+- `engine.parallel`: con `true`, las fases PLAN y MOVE de cada tick corren en `ParallelUpdater`
+  (`astra-worker-N`, sincronizados con `Phaser`); con `false`, en un bucle secuencial en `astra-engine`
+  (para depurar y comparar). El COMMIT siempre es secuencial.
+- `engine.workers`: hilos `astra-worker-N` (>= 0). Con `0` se usa `availableProcessors() - 1`, mínimo 1.
 - `lights.allRedSeconds`: duración de la fase en que **los dos ejes** están en rojo, entre el
   amarillo de un eje y el verde del otro. Deja que los vehículos que ya entraron terminen de
   cruzar. Reemplaza a `lights.redSeconds`: el rojo de un eje ya no tiene duración propia, dura
   lo que dura el verde + amarillo + todo rojo del eje contrario.
 - `vehicle.car.deceleration`: frenado máximo de un auto (px/s²).
-- `vehicle.minGap`: distancia mínima entre un vehículo y el de delante (px).
+- `vehicle.<tipo>.{maxSpeed,acceleration,deceleration,length}` (`car`, `bus`, `ambulance`): especificación
+  de cada tipo de vehículo (px/s, px/s², px/s², px). `SimConfig.specFor(VehicleKind)` la devuelve como
+  `VehicleSpec`; `model` la recibe a través de la interfaz `VehicleSpecs`.
+- `vehicle.minGap`: distancia mínima entre el parachoques delantero de un vehículo y el trasero del de
+  delante (px).
 - `intersection.stopLineOffset`: distancia de la línea de detención al centro de la
   intersección (px).
 - `intersection.capacity`: vehículos que pueden estar a la vez dentro de una intersección.
 - `intersection.boxLength`: largo de la zona de conflicto que se considera "dentro" (px).
 - `intersection.approachMargin`: margen extra antes de la línea de detención a partir del cual un
   vehículo intenta reservar la zona (px); evita reservarla desde lejos.
-- `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
+- `routing.congestionFactor`: penalización de `LeastCongestedStrategy`; el peso de una vía es
+  `length * (1 + congestionFactor * ocupación)`, con ocupación entre 0 y 1.
+- `routing.randomJitter`: variación máxima de `RandomRouteStrategy`; el peso de una vía es
+  `length * (1 + U[0,1) * randomJitter)`, sorteado una vez por cálculo de ruta.
+- `emergency.preemptDistance`: distancia al centro de la intersección (px) desde la que un vehículo con
+  prioridad de emergencia pone su semáforo en verde (`EmergencyState`) en el eje por donde llega. Lo libera
+  al salir del box; sigue necesitando reservar la zona.
+- `emergency.maxSeconds`: límite de seguridad de `EmergencyState`; si nadie lo libera antes, el semáforo
+  sigue solo con el amarillo de ese eje.
+- `spawn.*`: `VehicleSpawner` corre dentro del tick (hilo `astra-engine`) y cada `spawn.intervalMillis` de
+  tiempo simulado genera un vehículo entre dos intersecciones del borde del mapa, si hay menos de
+  `vehicle.maxCount` y su primera vía tiene espacio. `spawn.seed` lo hace reproducible.
+- `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
+  (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
 
 ---
 
