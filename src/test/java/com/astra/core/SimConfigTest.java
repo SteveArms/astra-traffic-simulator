@@ -21,12 +21,14 @@ class SimConfigTest {
         SimConfig config = SimConfig.load();
 
         assertEquals(Duration.ofMillis(50), config.tickMillis());
+        assertTrue(config.engineParallel());
+        assertEquals(4, config.engineWorkers());
         assertEquals(Duration.ofSeconds(8), config.greenSeconds());
         assertEquals(Duration.ofSeconds(2), config.yellowSeconds());
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
-        assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
+        assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
@@ -54,12 +56,14 @@ class SimConfigTest {
         SimConfig config = SimConfig.from(new Properties());
 
         assertEquals(Duration.ofMillis(50), config.tickMillis());
+        assertTrue(config.engineParallel());
+        assertEquals(4, config.engineWorkers());
         assertEquals(Duration.ofSeconds(8), config.greenSeconds());
         assertEquals(Duration.ofSeconds(2), config.yellowSeconds());
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
-        assertEquals(Duration.ofMillis(1500), config.spawnIntervalMillis());
+        assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
@@ -200,6 +204,38 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains("spawn.weight"), e.getMessage());
+    }
+
+    @Test
+    void zeroWorkersMeansProcessorsMinusOneButAtLeastOne() {
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_WORKERS, "0");
+        props.setProperty(SimConfig.ENGINE_PARALLEL, "FALSE");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), config.engineWorkers());
+        assertEquals(false, config.engineParallel());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "two", "1.5"})
+    void invalidWorkersThrowWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_WORKERS, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.ENGINE_WORKERS), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"yes", "1", ""})
+    void invalidParallelThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_PARALLEL, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.ENGINE_PARALLEL), e.getMessage());
     }
 
     private static void assertSpecs(SimConfig config) {

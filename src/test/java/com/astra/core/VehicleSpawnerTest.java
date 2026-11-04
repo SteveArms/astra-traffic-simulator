@@ -18,7 +18,10 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-/** Sin hilos: el motor avanza con step() y los semáforos se avanzan a mano por ticks, así todo es determinista. */
+/**
+ * El motor avanza con step() y los semáforos se avanzan a mano por ticks. La reproducibilidad se comprueba en modo
+ * secuencial: en paralelo los workers compiten de verdad por las zonas y el orden de llegada varía.
+ */
 @Timeout(60)
 class VehicleSpawnerTest {
 
@@ -45,14 +48,18 @@ class VehicleSpawnerTest {
         }
 
         Counts run(int ticks, Consumer<Run> afterTick) {
-            for (int i = 1; i <= ticks; i++) {
-                engine.step();
-                if (i % TICKS_PER_LIGHT_PHASE == 0) {
-                    for (TrafficLight light : lights.lights()) {
-                        TestLights.force(light, light.state().next());
+            try {
+                for (int i = 1; i <= ticks; i++) {
+                    engine.step();
+                    if (i % TICKS_PER_LIGHT_PHASE == 0) {
+                        for (TrafficLight light : lights.lights()) {
+                            TestLights.force(light, light.state().next());
+                        }
                     }
+                    afterTick.accept(this);
                 }
-                afterTick.accept(this);
+            } finally {
+                engine.stop();
             }
             return new Counts(spawner.spawned(), spawner.despawned(), Map.copyOf(spawner.activeByKind()),
                     Map.copyOf(spawner.spawnedByKind()));
@@ -65,8 +72,10 @@ class VehicleSpawnerTest {
 
     @Test
     void sameSeedGivesSameCounts() {
-        Counts first = new Run(SimConfig.load()).run(3_000);
-        Counts second = new Run(SimConfig.load()).run(3_000);
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_PARALLEL, "false");
+        Counts first = new Run(SimConfig.from(props)).run(3_000);
+        Counts second = new Run(SimConfig.from(props)).run(3_000);
 
         assertTrue(first.spawned() > 0);
         assertEquals(first, second);

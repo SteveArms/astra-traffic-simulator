@@ -7,6 +7,10 @@ Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
 - El motor de simulación corre en su propio hilo con paso fijo.
 - Los semáforos cambian de estado de forma asíncrona (patrón State) y cada intersección limita
   cuántos vehículos cruzan a la vez con un `Semaphore`.
+- Dentro de cada tick, los vehículos se actualizan en paralelo en `astra-worker-N`, con sus fases
+  sincronizadas por un `Phaser` (ver [Ciclo de un tick](#ciclo-de-un-tick)).
+- Autos, buses y ambulancias entran y salen por el borde del mapa, cada uno con su estrategia de
+  ruta; las ambulancias ponen en verde el semáforo al que se acercan.
 - La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo.
 - Los vehículos cruzan las intersecciones con Reloj de Lamport y Ricart‑Agrawala. *(En desarrollo)*
 
@@ -61,14 +65,16 @@ carpeta queda en `target\`, así que Git la ignora.
 ```
 src/main/java/com/astra/
 ├── app/          AstraApp: punto de entrada JavaFX
-├── core/         SimConfig, SimulationEngine, WorldState, WorldSnapshot, LightView,
-│                 IntersectionZone(s), DemoScenario
-├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph
-│   └── algo/     Dijkstra; A* (En desarrollo)
-├── model/        Vehicle, Car, VehicleKind, VehicleView; Bus, Ambulance y carriles (En desarrollo)
-├── traffic/      LightState, Green/Yellow/RedState, TrafficLight, LightController;
+├── core/         SimConfig, SimulationEngine, ParallelUpdater, WorldState, WorldSnapshot,
+│                 VehicleSpawner, LightView, IntersectionZone(s)
+├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph, Heuristics
+│   └── algo/     Dijkstra, AStar
+├── model/        Vehicle, Car, Bus, Ambulance, VehicleSpec(s), VehicleFactory, VehicleKind,
+│                 VehicleView; carriles (En desarrollo)
+├── traffic/      LightState, Green/Yellow/Red/EmergencyState, TrafficLight, LightController;
 │                 SmartAdaptiveState (En desarrollo)
-├── routing/      Estrategias de ruta (En desarrollo)
+├── routing/      RouteStrategy, ShortestDistance/LeastCongested/RandomRouteStrategy,
+│                 RouteStrategies, RoadOccupancy
 ├── command/      Comandos y CommandBus (En desarrollo)
 ├── events/       Eventos y su cola de prioridad (En desarrollo)
 ├── distributed/  Lamport y Ricart‑Agrawala (En desarrollo)
@@ -88,12 +94,48 @@ JavaFX, así que el motor se puede probar sin interfaz gráfica.
 | Elemento | Dónde | Para qué | Estado |
 | --- | --- | --- | --- |
 | State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`) | Cada fase del semáforo es una clase que decide el color de cada eje (NS/EW), su duración y la fase siguiente | Implementado (`SmartAdaptiveState` en desarrollo) |
+| Preferencia de paso | `traffic.EmergencyState`, `TrafficLight.preempt/release` | Una ambulancia a menos de `emergency.preemptDistance` pone en verde su eje; al salir del cruce sigue el ciclo normal. Sigue necesitando reservar la zona | Implementado |
 | `Semaphore` | `core.IntersectionZone` | Limita cuántos vehículos ocupan a la vez la zona de cruce; solo `tryAcquire`, nunca bloquea el tick | Implementado |
-| Strategy | `routing` (`RouteStrategy`) | Cambiar cómo calcula su ruta un vehículo: más corta, menos congestionada o aleatoria | En desarrollo |
+| Strategy | `routing` (`RouteStrategy`) | Cambiar cómo calcula su ruta un vehículo: más corta (Dijkstra), menos congestionada (A* con la ocupación de las vías, recalculada en cada intersección) o aleatoria | Implementado |
+| Tipos de vehículo | `model` (`Car`, `Bus`, `Ambulance`, `VehicleFactory`) | Cada tipo tiene su velocidad, aceleración, frenado y largo (`VehicleSpec`); `VehicleSpawner` los genera por pesos | Implementado |
+| `Phaser` | `core.ParallelUpdater` | Separa las fases PLAN y MOVE de los `astra-worker-N` dentro de cada tick | Implementado |
 | Command | `command` (`Command`, `CommandBus`) | La UI envía acciones (pausa, velocidad, aparición de vehículos) y el motor las ejecuta al inicio de cada tick | En desarrollo |
 | `Graph<V, E extends Edge<V>>` | `graph` | Grafo dirigido genérico y seguro para lecturas concurrentes | Implementado |
 | `PriorityQueue` | `graph.algo.Dijkstra` | Cola ordenada por distancia en el cálculo de caminos mínimos | Implementado |
+| `PriorityQueue` | `graph.algo.AStar` | Cola ordenada por `f = g + h` con heurístico euclidiano admisible | Implementado |
 | `PriorityQueue` | `events`, `distributed` | Cola de eventos y solicitudes de Ricart‑Agrawala ordenadas por `(timestamp, processId)` | En desarrollo |
+
+## Ciclo de un tick
+
+Cada tick (`engine.tickMillis`, 50 ms por defecto) pasa por tres fases. Con `engine.parallel=false`, las
+fases A y B corren en un bucle secuencial en `astra-engine`, para depurar y comparar.
+
+```
+ astra-engine        astra-worker-1 … astra-worker-N (un bloque de vehículos cada uno)
+ ────────────        ─────────────────────────────────────────────────────────────────
+     │
+     │  envía N tareas, ya registradas en el Phaser
+     ├──────────────▶ ┌─ A · PLAN ────────────────────────────────────────────────┐
+     │                │ distancia libre de cada vehículo → plan[i]                │
+     │                │ solo lee offsets ajenos (nadie se mueve hasta B)          │
+     │                │ zone.tryEnter · preempt · entryClaims.putIfAbsent         │
+     │                └───────────────────────────────────────────────────────────┘
+     │ espera (timeout 2 × tick)        ═══ Phaser: todos los PLAN terminan ═══
+     │                ┌─ B · MOVE ────────────────────────────────────────────────┐
+     │                │ vehicle.update(dt, plan[i]): solo su propio estado        │
+     │                └───────────────────────────────────────────────────────────┘
+     │ espera (timeout 2 × tick)        ═══ Phaser: todos los MOVE terminan ═══
+     ▼
+ ┌─ C · COMMIT (secuencial) ───────────────────────────────────────────────────┐
+ │ libera zonas y semáforos · rutas adaptativas · elimina a los que llegaron   │
+ │ VehicleSpawner · índice por vía · RoadOccupancy · publica WorldSnapshot     │
+ └─────────────────────────────────────────────────────────────────────────────┘
+```
+
+Si una tarea falla, sigue llegando al `Phaser` para no dejarlo colgado y el motor relanza la
+excepción al terminar la fase. En paralelo, los workers compiten de verdad por las zonas, así que
+dos ejecuciones con la misma semilla pueden diferir en el orden de llegada; en modo secuencial son
+idénticas.
 
 ## Formato del mapa
 

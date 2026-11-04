@@ -68,7 +68,7 @@ module com.astra {
 - [x] Día 1 — Setup Maven/JavaFX 21, `Graph<V,E>`, Dijkstra, MapLoader
 - [x] Día 2 — `SimulationEngine`, `WorldSnapshot`, `CityRenderer`
 - [x] Día 3 — Semáforos (State) asíncronos + `Semaphore` en intersecciones
-- [ ] Día 4 — Estrategias de ruta, Bus/Ambulance, spawner + `Phaser`
+- [x] Día 4 — Estrategias de ruta, Bus/Ambulance, spawner + `Phaser`
 - [ ] Día 5 — `CommandBus`, ControlPanel, StatsPanel, SmartAdaptiveState
 - [ ] Día 6 — Lamport + Ricart‑Agrawala, `SimLogger`, tests de estrés
 - [ ] Día 7 — Informe LaTeX, capturas, README, release v1.0.0

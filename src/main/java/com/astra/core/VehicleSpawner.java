@@ -1,6 +1,7 @@
 package com.astra.core;
 
 import com.astra.graph.Intersection;
+import com.astra.graph.Road;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleFactory;
 import com.astra.model.VehicleKind;
@@ -27,6 +28,7 @@ public final class VehicleSpawner {
     private static final double MILLIS_PER_SECOND = 1_000.0;
 
     private final WorldState world;
+    private final SimConfig cfg;
     private final VehicleFactory factory;
     private final Random random;
     private final double intervalSeconds;
@@ -37,11 +39,10 @@ public final class VehicleSpawner {
     private final Map<VehicleKind, Integer> spawnedByKind = new EnumMap<>(VehicleKind.class);
 
     private double accumulator;
-    // Vehículo ya elegido que esperaba espacio en su primera vía.
-    private Vehicle pending;
 
     public VehicleSpawner(WorldState world, SimConfig cfg) {
         this.world = Objects.requireNonNull(world, "world");
+        this.cfg = Objects.requireNonNull(cfg, "cfg");
         this.factory = new VehicleFactory(cfg);
         this.random = new Random(cfg.spawnSeed());
         this.intervalSeconds = cfg.spawnIntervalMillis().toMillis() / MILLIS_PER_SECOND;
@@ -60,7 +61,7 @@ public final class VehicleSpawner {
         }
     }
 
-    /** @implNote Called from astra-engine at the start of each tick. */
+    /** @implNote Called from astra-engine in the COMMIT phase of each tick. */
     public void update(double dtSeconds) {
         accumulator += dtSeconds;
         while (accumulator >= intervalSeconds) {
@@ -91,21 +92,12 @@ public final class VehicleSpawner {
         return border;
     }
 
+    // Si el par elegido no tiene camino o espacio, se descarta y el próximo intervalo sortea otro: así un origen
+    // congestionado no bloquea a los demás. El vehículo solo se crea si entra, y no gasta un id.
     private void trySpawn() {
         if (world.vehicleCount() >= maxCount) {
             return;
         }
-        if (pending == null) {
-            pending = create();
-        }
-        if (pending != null && hasRoom(pending)) {
-            world.addVehicle(pending);
-            spawnedByKind.merge(pending.kind(), 1, Integer::sum);
-            pending = null;
-        }
-    }
-
-    private Vehicle create() {
         VehicleKind kind = pick(kindWeights);
         RouteStrategy strategy = pick(strategyWeights);
         Intersection origin = border.get(random.nextInt(border.size()));
@@ -113,18 +105,18 @@ public final class VehicleSpawner {
         if (destination.equals(origin)) {
             destination = border.get(border.size() - 1);
         }
-        try {
-            return factory.create(kind, strategy, origin, destination, world.graph());
-        } catch (IllegalStateException e) {
-            // Sin camino entre ese par: se elige otro en el próximo intervalo.
-            return null;
+        List<Road> route = strategy.route(world.graph(), origin, destination);
+        if (route.isEmpty() || !hasRoom(route.get(0), cfg.specFor(kind).length())) {
+            return;
         }
+        Vehicle vehicle = factory.create(kind, strategy, route);
+        world.addVehicle(vehicle);
+        spawnedByKind.merge(kind, 1, Integer::sum);
     }
 
     // El que nace queda en el centro de su origen: necesita sitio en su vía y en la zona.
-    private boolean hasRoom(Vehicle vehicle) {
-        return world.hasRoomAtStart(vehicle.currentRoad(), vehicle.length())
-                && !world.zones().zoneOf(vehicle.origin()).isFull();
+    private boolean hasRoom(Road first, double length) {
+        return world.hasRoomAtStart(first, length) && !world.zones().zoneOf(first.from()).isFull();
     }
 
     private <T> T pick(Map<T, Double> weights) {

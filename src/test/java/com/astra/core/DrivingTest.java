@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -85,6 +86,13 @@ class DrivingTest {
         vehicle.assignRoute(List.of(route));
         world.addVehicle(vehicle);
         return vehicle;
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (engine != null) {
+            engine.stop();
+        }
     }
 
     private double stopLine(Road road) {

@@ -68,7 +68,7 @@ astra-traffic-simulator/
     │   └── com/astra/
     │       ├── app/          AstraApp, MainController
     │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, PauseGate,
-    │       │                 SimConfig, VehicleSpawner
+    │       │                 SimConfig, VehicleSpawner, ParallelUpdater
     │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, Road, RoadGraph
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
     │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
@@ -200,12 +200,14 @@ Ningún número mágico en el código. Todo en `config.properties` leído por `S
 
 ```properties
 engine.tickMillis=50
+engine.parallel=true
+engine.workers=4
 lights.greenSeconds=8
 lights.yellowSeconds=2
 lights.allRedSeconds=1
 smart.queueThreshold=5
 smart.maxExtensionSeconds=6
-spawn.intervalMillis=1500
+spawn.intervalMillis=300
 spawn.seed=42
 spawn.weight.car=0.75
 spawn.weight.bus=0.20
@@ -239,6 +241,10 @@ map.file=maps/city-3x3.json
 log.file=logs/astra.log
 ```
 
+- `engine.parallel`: con `true`, las fases PLAN y MOVE de cada tick corren en `ParallelUpdater`
+  (`astra-worker-N`, sincronizados con `Phaser`); con `false`, en un bucle secuencial en `astra-engine`
+  (para depurar y comparar). El COMMIT siempre es secuencial.
+- `engine.workers`: hilos `astra-worker-N` (>= 0). Con `0` se usa `availableProcessors() - 1`, mínimo 1.
 - `lights.allRedSeconds`: duración de la fase en que **los dos ejes** están en rojo, entre el
   amarillo de un eje y el verde del otro. Deja que los vehículos que ya entraron terminen de
   cruzar. Reemplaza a `lights.redSeconds`: el rojo de un eje ya no tiene duración propia, dura

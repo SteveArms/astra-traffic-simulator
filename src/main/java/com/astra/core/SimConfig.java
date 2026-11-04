@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -32,6 +33,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     public static final String RESOURCE = "/com/astra/config.properties";
 
     static final String TICK_MILLIS = "engine.tickMillis";
+    static final String ENGINE_PARALLEL = "engine.parallel";
+    static final String ENGINE_WORKERS = "engine.workers";
     static final String GREEN_SECONDS = "lights.greenSeconds";
     static final String YELLOW_SECONDS = "lights.yellowSeconds";
     static final String ALL_RED_SECONDS = "lights.allRedSeconds";
@@ -72,12 +75,14 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
 
     // Deben coincidir con config.properties.
     private static final long DEFAULT_TICK_MILLIS = 50;
+    private static final boolean DEFAULT_ENGINE_PARALLEL = true;
+    private static final int DEFAULT_ENGINE_WORKERS = 4;
     private static final long DEFAULT_GREEN_SECONDS = 8;
     private static final long DEFAULT_YELLOW_SECONDS = 2;
     private static final long DEFAULT_ALL_RED_SECONDS = 1;
     private static final int DEFAULT_SMART_QUEUE_THRESHOLD = 5;
     private static final long DEFAULT_SMART_MAX_EXTENSION_SECONDS = 6;
-    private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 1500;
+    private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 300;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
     private static final double DEFAULT_CAR_ACCELERATION = 3;
@@ -111,6 +116,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
 
     private final Duration tickMillis;
+    private final boolean engineParallel;
+    private final int engineWorkers;
     private final Duration greenSeconds;
     private final Duration yellowSeconds;
     private final Duration allRedSeconds;
@@ -141,6 +148,10 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
 
     private SimConfig(Properties p) {
         tickMillis = Duration.ofMillis(positiveLong(p, TICK_MILLIS, DEFAULT_TICK_MILLIS));
+        engineParallel = bool(p, ENGINE_PARALLEL, DEFAULT_ENGINE_PARALLEL);
+        int workers = nonNegativeInt(p, ENGINE_WORKERS, DEFAULT_ENGINE_WORKERS);
+        // 0 = automático: deja un núcleo libre para el FX Thread.
+        engineWorkers = workers > 0 ? workers : Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
         greenSeconds = Duration.ofSeconds(positiveLong(p, GREEN_SECONDS, DEFAULT_GREEN_SECONDS));
         yellowSeconds = Duration.ofSeconds(positiveLong(p, YELLOW_SECONDS, DEFAULT_YELLOW_SECONDS));
         allRedSeconds = Duration.ofSeconds(positiveLong(p, ALL_RED_SECONDS, DEFAULT_ALL_RED_SECONDS));
@@ -214,6 +225,15 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
 
     public Duration tickMillis() {
         return tickMillis;
+    }
+
+    public boolean engineParallel() {
+        return engineParallel;
+    }
+
+    /** Siempre >= 1; con {@code engine.workers=0} vale {@code availableProcessors() - 1}. */
+    public int engineWorkers() {
+        return engineWorkers;
     }
 
     @Override
@@ -342,6 +362,36 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         }
         if (!(value > 0) || !Double.isFinite(value)) {
             throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " must be > 0");
+        }
+        return value;
+    }
+
+    private static boolean bool(Properties p, String key, boolean defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        return switch (raw.strip().toLowerCase(Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException(
+                    "Invalid value for '" + key + "': '" + raw + "' must be true or false");
+        };
+    }
+
+    private static int nonNegativeInt(Properties p, String key, int defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        int value;
+        try {
+            value = Integer.parseInt(raw.strip());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw + "' is not an integer", e);
+        }
+        if (value < 0) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " must be >= 0");
         }
         return value;
     }
