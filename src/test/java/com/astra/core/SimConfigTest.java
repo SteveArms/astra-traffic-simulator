@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.astra.model.VehicleKind;
+import com.astra.model.VehicleSpec;
 import java.time.Duration;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,7 @@ class SimConfigTest {
         assertEquals(2, config.intersectionCapacity());
         assertEquals(16, config.boxLength());
         assertEquals(2, config.approachMargin());
+        assertSpecs(config);
         assertEquals(2.0, config.congestionFactor());
         assertEquals(0.6, config.randomJitter());
         assertEquals(4, config.demoCarCount());
@@ -60,6 +63,7 @@ class SimConfigTest {
         assertEquals(2, config.intersectionCapacity());
         assertEquals(16, config.boxLength());
         assertEquals(2, config.approachMargin());
+        assertSpecs(config);
         assertEquals(2.0, config.congestionFactor());
         assertEquals(0.6, config.randomJitter());
         assertEquals(4, config.demoCarCount());
@@ -129,7 +133,10 @@ class SimConfigTest {
     @ValueSource(strings = {
         SimConfig.ALL_RED_SECONDS, SimConfig.CAR_DECELERATION, SimConfig.MIN_GAP,
         SimConfig.STOP_LINE_OFFSET, SimConfig.INTERSECTION_CAPACITY, SimConfig.BOX_LENGTH,
-        SimConfig.APPROACH_MARGIN, SimConfig.ROUTING_CONGESTION_FACTOR, SimConfig.ROUTING_RANDOM_JITTER
+        SimConfig.APPROACH_MARGIN, SimConfig.ROUTING_CONGESTION_FACTOR, SimConfig.ROUTING_RANDOM_JITTER,
+        SimConfig.CAR_LENGTH, SimConfig.BUS_MAX_SPEED, SimConfig.BUS_ACCELERATION, SimConfig.BUS_DECELERATION,
+        SimConfig.BUS_LENGTH, SimConfig.AMBULANCE_MAX_SPEED, SimConfig.AMBULANCE_ACCELERATION,
+        SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();
@@ -137,5 +144,22 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(key), e.getMessage());
+    }
+
+    @Test
+    void specForOverridesPerKind() {
+        var props = new Properties();
+        props.setProperty(SimConfig.BUS_LENGTH, "25");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(new VehicleSpec(9, 1.5, 4, 25), config.specFor(VehicleKind.BUS));
+        assertEquals(new VehicleSpec(14, 3, 6, 12), config.specFor(VehicleKind.CAR));
+    }
+
+    private static void assertSpecs(SimConfig config) {
+        assertEquals(new VehicleSpec(14, 3, 6, 12), config.specFor(VehicleKind.CAR));
+        assertEquals(new VehicleSpec(9, 1.5, 4, 20), config.specFor(VehicleKind.BUS));
+        assertEquals(new VehicleSpec(20, 4, 8, 14), config.specFor(VehicleKind.AMBULANCE));
     }
 }

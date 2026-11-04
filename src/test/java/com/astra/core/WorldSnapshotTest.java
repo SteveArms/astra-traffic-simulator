@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 
 class WorldSnapshotTest {
 
-    private static final VehicleView CAR = new VehicleView("CAR-1", VehicleKind.CAR, 10, 20, 0, 5);
-    private static final VehicleView BUS = new VehicleView("BUS-1", VehicleKind.BUS, 30, 40, Math.PI, 3);
+    private static final VehicleView CAR = new VehicleView("CAR-1", VehicleKind.CAR, 10, 20, 0, 5, 12, "SHORTEST");
+    private static final VehicleView BUS = new VehicleView("BUS-1", VehicleKind.BUS, 30, 40, Math.PI, 3, 20, "RANDOM");
     private static final LightView LIGHT =
             new LightView("I11", 350, 300, LightColor.GREEN, LightColor.RED, "GREEN(NS)", 1, 2);
 
@@ -51,7 +51,10 @@ class WorldSnapshotTest {
     @Test
     void nullsAreRejected() {
         assertThrows(NullPointerException.class, () -> new WorldSnapshot(1, 0, null, List.of()));
-        assertThrows(NullPointerException.class, () -> new VehicleView(null, VehicleKind.CAR, 0, 0, 0, 0));
+        assertThrows(NullPointerException.class,
+                () -> new VehicleView(null, VehicleKind.CAR, 0, 0, 0, 0, 12, "SHORTEST"));
+        assertThrows(NullPointerException.class,
+                () -> new VehicleView("CAR-1", VehicleKind.CAR, 0, 0, 0, 0, 12, null));
     }
 
     @Test

@@ -71,7 +71,8 @@ astra-traffic-simulator/
     │       │                 SimConfig, VehicleSpawner
     │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, Road, RoadGraph
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
-    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane
+    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
+    │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
     │       ├── traffic/      TrafficLight, LightState, GreenState, YellowState, RedState,
     │       │                 SmartAdaptiveState, LightController
     │       ├── routing/      RouteStrategy, ShortestDistanceStrategy,
@@ -96,6 +97,7 @@ Reglas de dependencia entre paquetes:
 - `core`, `model`, `traffic`, `routing`, `graph`, `distributed` **no importan `javafx.*`**
   (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
 - `graph` no conoce `model` ni `traffic`: es genérico.
+- `model` solo depende de `graph` y `routing`.
 
 ---
 
@@ -205,6 +207,15 @@ vehicle.maxCount=150
 vehicle.car.maxSpeed=14
 vehicle.car.acceleration=3
 vehicle.car.deceleration=6
+vehicle.car.length=12
+vehicle.bus.maxSpeed=9
+vehicle.bus.acceleration=1.5
+vehicle.bus.deceleration=4
+vehicle.bus.length=20
+vehicle.ambulance.maxSpeed=20
+vehicle.ambulance.acceleration=4
+vehicle.ambulance.deceleration=8
+vehicle.ambulance.length=14
 vehicle.minGap=10
 intersection.stopLineOffset=14
 intersection.capacity=2
@@ -223,7 +234,11 @@ log.file=logs/astra.log
   cruzar. Reemplaza a `lights.redSeconds`: el rojo de un eje ya no tiene duración propia, dura
   lo que dura el verde + amarillo + todo rojo del eje contrario.
 - `vehicle.car.deceleration`: frenado máximo de un auto (px/s²).
-- `vehicle.minGap`: distancia mínima entre un vehículo y el de delante (px).
+- `vehicle.<tipo>.{maxSpeed,acceleration,deceleration,length}` (`car`, `bus`, `ambulance`): especificación
+  de cada tipo de vehículo (px/s, px/s², px/s², px). `SimConfig.specFor(VehicleKind)` la devuelve como
+  `VehicleSpec`; `model` la recibe a través de la interfaz `VehicleSpecs`.
+- `vehicle.minGap`: distancia mínima entre el parachoques delantero de un vehículo y el trasero del de
+  delante (px).
 - `intersection.stopLineOffset`: distancia de la línea de detención al centro de la
   intersección (px).
 - `intersection.capacity`: vehículos que pueden estar a la vez dentro de una intersección.

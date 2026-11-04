@@ -1,13 +1,17 @@
 package com.astra.model;
 
+import com.astra.graph.Graph;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
+import com.astra.routing.RouteStrategy;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Vehículo que recorre una ruta de vías consecutivas.
+ * Vehículo que recorre una ruta de vías consecutivas de {@code origin} a {@code destination}.
+ * {@code offset} es la posición del parachoques delantero sobre la vía actual.
  *
  * @implNote Solo astra-engine modifica su estado; la vista usa {@link #toView()}.
  */
@@ -15,44 +19,63 @@ public abstract class Vehicle {
 
     private final String id;
     private final VehicleKind kind;
-    private final double maxSpeed;
-    private final double acceleration;
-    private final double deceleration;
+    private final VehicleSpec spec;
+    private final RouteStrategy strategy;
+    private final Intersection origin;
+    private final Intersection destination;
 
-    private List<Road> route;
+    private List<Road> route = List.of();
     private int roadIndex;
     private double offset;
     private double speed;
     private boolean finished;
 
-    protected Vehicle(String id, VehicleKind kind, List<Road> route, double maxSpeed, double acceleration,
-            double deceleration) {
+    /** La ruta se asigna después con {@link #assignRoute}; normalmente lo hace {@link VehicleFactory}. */
+    protected Vehicle(String id, VehicleKind kind, VehicleSpec spec, RouteStrategy strategy, Intersection origin,
+            Intersection destination) {
         this.id = Objects.requireNonNull(id, "id");
         this.kind = Objects.requireNonNull(kind, "kind");
-        if (!(maxSpeed > 0) || !(acceleration > 0) || !(deceleration > 0)) {
-            throw new IllegalArgumentException("maxSpeed, acceleration and deceleration must be > 0 for " + id);
-        }
-        this.maxSpeed = maxSpeed;
-        this.acceleration = acceleration;
-        this.deceleration = deceleration;
-        assignRoute(route);
+        this.spec = Objects.requireNonNull(spec, "spec");
+        this.strategy = Objects.requireNonNull(strategy, "strategy");
+        this.origin = Objects.requireNonNull(origin, "origin");
+        this.destination = Objects.requireNonNull(destination, "destination");
     }
 
+    /** Reemplaza la ruta y vuelve al inicio; debe ir de {@code origin} a {@code destination}. */
     public final void assignRoute(List<Road> newRoute) {
         var copy = List.copyOf(newRoute);
-        if (copy.isEmpty()) {
-            throw new IllegalArgumentException("Route of " + id + " must not be empty");
-        }
-        for (int i = 1; i < copy.size(); i++) {
-            if (!copy.get(i - 1).to().equals(copy.get(i).from())) {
-                throw new IllegalArgumentException("Route of " + id + " is not connected at "
-                        + copy.get(i - 1).id() + " -> " + copy.get(i).id());
-            }
+        requireConnected(copy);
+        if (!copy.get(0).from().equals(origin)) {
+            throw new IllegalArgumentException("Route of " + id + " must start at " + origin.id());
         }
         route = copy;
         roadIndex = 0;
         offset = 0;
         finished = false;
+    }
+
+    /**
+     * Recalcula el resto de la ruta desde {@code from}, el final de la vía actual, que se conserva. Si la
+     * estrategia no encuentra camino, la ruta no cambia.
+     *
+     * @implNote Called from astra-engine.
+     */
+    public void reroute(Graph<Intersection, Road> g, Intersection from) {
+        Road current = currentRoad();
+        if (!current.to().equals(from)) {
+            throw new IllegalArgumentException("Reroute of " + id + " must start at the end of " + current.id());
+        }
+        List<Road> tail = strategy.route(g, from, destination);
+        if (tail.isEmpty() && !from.equals(destination)) {
+            return;
+        }
+        var newRoute = new ArrayList<Road>(tail.size() + 1);
+        newRoute.add(current);
+        newRoute.addAll(tail);
+        var copy = List.copyOf(newRoute);
+        requireConnected(copy);
+        route = copy;
+        roadIndex = 0;
     }
 
     /** @param freeDistance distancia disponible antes de tener que estar detenido */
@@ -62,10 +85,10 @@ public abstract class Vehicle {
         }
         double free = Math.max(0, freeDistance);
         // Velocidad desde la que todavía se puede frenar dentro de free.
-        double target = Math.min(speedCap(), Math.sqrt(2 * deceleration * free));
+        double target = Math.min(speedCap(), Math.sqrt(2 * spec.deceleration() * free));
         speed = speed < target
-                ? Math.min(target, speed + acceleration * dtSeconds)
-                : Math.max(target, speed - deceleration * dtSeconds);
+                ? Math.min(target, speed + spec.acceleration() * dtSeconds)
+                : Math.max(target, speed - spec.deceleration() * dtSeconds);
         double step = speed * dtSeconds;
         if (step > free) {
             step = free;
@@ -85,6 +108,10 @@ public abstract class Vehicle {
         }
     }
 
+    public boolean hasEmergencyPriority() {
+        return false;
+    }
+
     public double x() {
         Road road = currentRoad();
         return road.from().x() + (road.to().x() - road.from().x()) * progress();
@@ -101,10 +128,13 @@ public abstract class Vehicle {
     }
 
     public VehicleView toView() {
-        return new VehicleView(id, kind, x(), y(), headingRad(), speed);
+        return new VehicleView(id, kind, x(), y(), headingRad(), speed, spec.length(), strategy.name());
     }
 
     public Road currentRoad() {
+        if (route.isEmpty()) {
+            throw new IllegalStateException("Vehicle " + id + " has no route yet");
+        }
         return route.get(roadIndex);
     }
 
@@ -116,8 +146,9 @@ public abstract class Vehicle {
         return currentRoad().length() - offset;
     }
 
-    public Intersection destination() {
-        return route.get(route.size() - 1).to();
+    /** Posición del parachoques trasero sobre la vía actual; negativa si aún asoma en la anterior. */
+    public double rearOffset() {
+        return offset - spec.length();
     }
 
     public boolean isFinished() {
@@ -132,6 +163,22 @@ public abstract class Vehicle {
         return kind;
     }
 
+    public VehicleSpec spec() {
+        return spec;
+    }
+
+    public RouteStrategy strategy() {
+        return strategy;
+    }
+
+    public Intersection origin() {
+        return origin;
+    }
+
+    public Intersection destination() {
+        return destination;
+    }
+
     public List<Road> route() {
         return route;
     }
@@ -144,20 +191,39 @@ public abstract class Vehicle {
         return speed;
     }
 
+    public double length() {
+        return spec.length();
+    }
+
     public double maxSpeed() {
-        return maxSpeed;
+        return spec.maxSpeed();
     }
 
     public double acceleration() {
-        return acceleration;
+        return spec.acceleration();
     }
 
     public double deceleration() {
-        return deceleration;
+        return spec.deceleration();
+    }
+
+    private void requireConnected(List<Road> candidate) {
+        if (candidate.isEmpty()) {
+            throw new IllegalArgumentException("Route of " + id + " must not be empty");
+        }
+        for (int i = 1; i < candidate.size(); i++) {
+            if (!candidate.get(i - 1).to().equals(candidate.get(i).from())) {
+                throw new IllegalArgumentException("Route of " + id + " is not connected at "
+                        + candidate.get(i - 1).id() + " -> " + candidate.get(i).id());
+            }
+        }
+        if (!candidate.get(candidate.size() - 1).to().equals(destination)) {
+            throw new IllegalArgumentException("Route of " + id + " must end at " + destination.id());
+        }
     }
 
     private double speedCap() {
-        return Math.min(maxSpeed, currentRoad().speedLimit());
+        return Math.min(spec.maxSpeed(), currentRoad().speedLimit());
     }
 
     private double progress() {

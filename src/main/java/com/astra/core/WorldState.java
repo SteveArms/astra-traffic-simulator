@@ -56,15 +56,23 @@ public final class WorldState {
         return zones;
     }
 
-    /** @implNote Called from astra-engine, or before the engine starts. */
+    /**
+     * Nace en el centro de la intersección de origen, así que intenta reservar su zona hasta salir del box.
+     *
+     * @implNote Called from astra-engine, or before the engine starts.
+     */
     public void addVehicle(Vehicle vehicle) {
         vehicles.add(Objects.requireNonNull(vehicle, "vehicle"));
+        IntersectionZone start = zones.zoneOf(vehicle.currentRoad().from());
+        if (start.tryEnter(vehicle.id())) {
+            held.put(vehicle.id(), start);
+        }
     }
 
     /**
-     * Si el gancho no asigna una ruta nueva, el vehículo se elimina.
+     * El vehículo que llega siempre se elimina; el gancho puede agregar otro con {@link #addVehicle}.
      *
-     * @implNote The hook runs on astra-engine.
+     * @implNote The hook runs on astra-engine, after the finished vehicle released its zones.
      */
     public void setOnVehicleFinished(Consumer<Vehicle> hook) {
         onVehicleFinished = Objects.requireNonNull(hook, "hook");
@@ -81,8 +89,10 @@ public final class WorldState {
             vehicle.update(dtSeconds, freeDistance(vehicle, byRoad));
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
+                releaseAll(vehicle);
                 onVehicleFinished.accept(vehicle);
-                releaseAfterFinish(vehicle);
+            } else if (!vehicle.currentRoad().equals(before) && vehicle.strategy().isAdaptive()) {
+                vehicle.reroute(graph, vehicle.currentRoad().to());
             }
             relocate(byRoad, vehicle, before);
         }
@@ -128,7 +138,7 @@ public final class WorldState {
         if (index <= 0) {
             return Double.POSITIVE_INFINITY;
         }
-        return sameRoad.get(index - 1).offset() - vehicle.offset() - minGap;
+        return sameRoad.get(index - 1).rearOffset() - vehicle.offset() - minGap;
     }
 
     // También en la última vía: el destino es el centro de la intersección, así que respeta luz y zona.
@@ -163,7 +173,7 @@ public final class WorldState {
         if (onRoad.isEmpty()) {
             return road.length();
         }
-        return onRoad.get(onRoad.size() - 1).offset() - minGap;
+        return onRoad.get(onRoad.size() - 1).rearOffset() - minGap;
     }
 
     private void releaseIfClear(Vehicle vehicle) {
@@ -172,16 +182,6 @@ public final class WorldState {
                 && vehicle.offset() > boxLength) {
             zone.leave(vehicle.id());
             held.remove(vehicle.id());
-        }
-    }
-
-    // Si la ruta nueva sale de la intersección donde terminó, conserva la zona hasta dejar el box.
-    private void releaseAfterFinish(Vehicle vehicle) {
-        IntersectionZone zone = held.get(vehicle.id());
-        boolean continuesFromZone = !vehicle.isFinished() && zone != null
-                && zone.intersection().equals(vehicle.currentRoad().from());
-        if (!continuesFromZone) {
-            releaseAll(vehicle);
         }
     }
 

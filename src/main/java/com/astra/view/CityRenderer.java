@@ -39,7 +39,6 @@ public final class CityRenderer extends StackPane {
     private static final double LABEL_GAP = 4;
     private static final Font LABEL_FONT = Font.font("System", 12);
 
-    private static final double VEHICLE_LENGTH = 12;
     private static final double VEHICLE_WIDTH = 6;
     private static final double VEHICLE_RIGHT_OFFSET = 5;
     private static final double OUTLINE_WIDTH = 1;
@@ -289,10 +288,12 @@ public final class CityRenderer extends StackPane {
         gc.translate(x, y);
         gc.rotate(Math.toDegrees(heading));
         gc.setFill(colorOf(vehicle.kind()));
-        gc.fillRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
+        // (x, y) es el parachoques delantero: el cuerpo se extiende hacia atrás.
+        double length = vehicle.length();
+        gc.fillRect(-length, -VEHICLE_WIDTH / 2, length, VEHICLE_WIDTH);
         gc.setStroke(OUTLINE);
         gc.setLineWidth(OUTLINE_WIDTH);
-        gc.strokeRect(-VEHICLE_LENGTH / 2, -VEHICLE_WIDTH / 2, VEHICLE_LENGTH, VEHICLE_WIDTH);
+        gc.strokeRect(-length, -VEHICLE_WIDTH / 2, length, VEHICLE_WIDTH);
         gc.restore();
     }
 

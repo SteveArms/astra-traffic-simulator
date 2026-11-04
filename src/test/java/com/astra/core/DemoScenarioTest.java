@@ -3,15 +3,19 @@ package com.astra.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
-import com.astra.graph.algo.Dijkstra;
 import com.astra.model.Vehicle;
+import com.astra.model.VehicleKind;
+import com.astra.routing.RouteStrategy;
+import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightController;
 import com.astra.util.MapLoader;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +25,7 @@ import org.junit.jupiter.api.Timeout;
 class DemoScenarioTest {
 
     private static final long SEED = 7;
+    private static final RouteStrategy SHORTEST = new ShortestDistanceStrategy();
 
     private SimConfig config;
     private WorldState world;
@@ -37,8 +42,10 @@ class DemoScenarioTest {
     void seedCreatesConfiguredCarsWithRoutes() {
         assertEquals(config.demoCarCount(), world.vehicleCount());
         for (Vehicle vehicle : world.vehicles()) {
-            assertFalse(vehicle.route().isEmpty());
-            assertFalse(vehicle.route().get(0).from().equals(vehicle.destination()));
+            assertEquals(VehicleKind.CAR, vehicle.kind());
+            assertEquals("SHORTEST", vehicle.strategy().name());
+            assertEquals(vehicle.origin(), vehicle.route().get(0).from());
+            assertNotEquals(vehicle.origin(), vehicle.destination());
         }
     }
 
@@ -53,7 +60,7 @@ class DemoScenarioTest {
     }
 
     @Test
-    void carsGetNewRoutesWhenTheyArrive() {
+    void arrivedCarsAreReplacedFromTheirDestination() {
         List<Vehicle> initial = List.copyOf(world.vehicles());
         var engine = new SimulationEngine(config, world);
 
@@ -61,7 +68,8 @@ class DemoScenarioTest {
             engine.step();
         }
 
-        assertEquals(initial, world.vehicles());
+        assertEquals(config.demoCarCount(), world.vehicleCount());
+        assertTrue(world.vehicles().stream().anyMatch(v -> !initial.contains(v)), "no car was replaced");
         for (Vehicle vehicle : world.vehicles()) {
             assertFalse(vehicle.route().isEmpty());
             assertFalse(vehicle.isFinished());
@@ -73,11 +81,11 @@ class DemoScenarioTest {
         RoadGraph graph = world.graph();
         Road intoCorner = road(graph, "I01", "I00");
         List<Intersection> all = List.copyOf(graph.vertices());
-        var dijkstra = new Dijkstra<Intersection, Road>();
 
         for (long seed = 0; seed < 50; seed++) {
-            List<Road> route = DemoScenario.randomRoute(graph, dijkstra, all, new Random(seed), intoCorner.to(),
-                    intoCorner).orElseThrow();
+            Intersection destination = DemoScenario.randomDestination(graph, SHORTEST, all, new Random(seed),
+                    intoCorner.to(), intoCorner).orElseThrow();
+            List<Road> route = SHORTEST.route(graph, intoCorner.to(), destination);
             assertNotEquals("I01", route.get(0).to().id(), "U-turn with seed " + seed);
         }
     }
@@ -90,10 +98,10 @@ class DemoScenarioTest {
         List.of(a, b).forEach(line::addVertex);
         Road ab = line.addTwoWayRoad("AB", a, b, 10, 1).get(0);
 
-        List<Road> route = DemoScenario.randomRoute(line, new Dijkstra<>(), List.of(a, b), new Random(1), b, ab)
-                .orElseThrow();
+        Optional<Intersection> destination =
+                DemoScenario.randomDestination(line, SHORTEST, List.of(a, b), new Random(1), b, ab);
 
-        assertEquals(List.of(a), route.stream().map(Road::to).toList());
+        assertEquals(Optional.of(a), destination);
     }
 
     private static Road road(RoadGraph graph, String from, String to) {

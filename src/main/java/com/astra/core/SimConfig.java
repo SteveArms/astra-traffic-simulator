@@ -1,5 +1,8 @@
 package com.astra.core;
 
+import com.astra.model.VehicleKind;
+import com.astra.model.VehicleSpec;
+import com.astra.model.VehicleSpecs;
 import com.astra.routing.RoutingSettings;
 import com.astra.traffic.LightTimings;
 import java.io.IOException;
@@ -17,7 +20,7 @@ import java.util.Properties;
  * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
  * Thread-safe por ser inmutable.
  */
-public final class SimConfig implements LightTimings, RoutingSettings {
+public final class SimConfig implements LightTimings, RoutingSettings, VehicleSpecs {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
@@ -32,6 +35,15 @@ public final class SimConfig implements LightTimings, RoutingSettings {
     static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
     static final String CAR_ACCELERATION = "vehicle.car.acceleration";
     static final String CAR_DECELERATION = "vehicle.car.deceleration";
+    static final String CAR_LENGTH = "vehicle.car.length";
+    static final String BUS_MAX_SPEED = "vehicle.bus.maxSpeed";
+    static final String BUS_ACCELERATION = "vehicle.bus.acceleration";
+    static final String BUS_DECELERATION = "vehicle.bus.deceleration";
+    static final String BUS_LENGTH = "vehicle.bus.length";
+    static final String AMBULANCE_MAX_SPEED = "vehicle.ambulance.maxSpeed";
+    static final String AMBULANCE_ACCELERATION = "vehicle.ambulance.acceleration";
+    static final String AMBULANCE_DECELERATION = "vehicle.ambulance.deceleration";
+    static final String AMBULANCE_LENGTH = "vehicle.ambulance.length";
     static final String MIN_GAP = "vehicle.minGap";
     static final String STOP_LINE_OFFSET = "intersection.stopLineOffset";
     static final String INTERSECTION_CAPACITY = "intersection.capacity";
@@ -56,6 +68,15 @@ public final class SimConfig implements LightTimings, RoutingSettings {
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
     private static final double DEFAULT_CAR_ACCELERATION = 3;
     private static final double DEFAULT_CAR_DECELERATION = 6;
+    private static final double DEFAULT_CAR_LENGTH = 12;
+    private static final double DEFAULT_BUS_MAX_SPEED = 9;
+    private static final double DEFAULT_BUS_ACCELERATION = 1.5;
+    private static final double DEFAULT_BUS_DECELERATION = 4;
+    private static final double DEFAULT_BUS_LENGTH = 20;
+    private static final double DEFAULT_AMBULANCE_MAX_SPEED = 20;
+    private static final double DEFAULT_AMBULANCE_ACCELERATION = 4;
+    private static final double DEFAULT_AMBULANCE_DECELERATION = 8;
+    private static final double DEFAULT_AMBULANCE_LENGTH = 14;
     private static final double DEFAULT_MIN_GAP = 10;
     private static final double DEFAULT_STOP_LINE_OFFSET = 14;
     private static final int DEFAULT_INTERSECTION_CAPACITY = 2;
@@ -79,6 +100,9 @@ public final class SimConfig implements LightTimings, RoutingSettings {
     private final double carMaxSpeed;
     private final double carAcceleration;
     private final double carDeceleration;
+    private final VehicleSpec carSpec;
+    private final VehicleSpec busSpec;
+    private final VehicleSpec ambulanceSpec;
     private final double minGap;
     private final double stopLineOffset;
     private final int intersectionCapacity;
@@ -105,6 +129,16 @@ public final class SimConfig implements LightTimings, RoutingSettings {
         carMaxSpeed = positiveDouble(p, CAR_MAX_SPEED, DEFAULT_CAR_MAX_SPEED);
         carAcceleration = positiveDouble(p, CAR_ACCELERATION, DEFAULT_CAR_ACCELERATION);
         carDeceleration = positiveDouble(p, CAR_DECELERATION, DEFAULT_CAR_DECELERATION);
+        carSpec = new VehicleSpec(carMaxSpeed, carAcceleration, carDeceleration,
+                positiveDouble(p, CAR_LENGTH, DEFAULT_CAR_LENGTH));
+        busSpec = new VehicleSpec(positiveDouble(p, BUS_MAX_SPEED, DEFAULT_BUS_MAX_SPEED),
+                positiveDouble(p, BUS_ACCELERATION, DEFAULT_BUS_ACCELERATION),
+                positiveDouble(p, BUS_DECELERATION, DEFAULT_BUS_DECELERATION),
+                positiveDouble(p, BUS_LENGTH, DEFAULT_BUS_LENGTH));
+        ambulanceSpec = new VehicleSpec(positiveDouble(p, AMBULANCE_MAX_SPEED, DEFAULT_AMBULANCE_MAX_SPEED),
+                positiveDouble(p, AMBULANCE_ACCELERATION, DEFAULT_AMBULANCE_ACCELERATION),
+                positiveDouble(p, AMBULANCE_DECELERATION, DEFAULT_AMBULANCE_DECELERATION),
+                positiveDouble(p, AMBULANCE_LENGTH, DEFAULT_AMBULANCE_LENGTH));
         minGap = positiveDouble(p, MIN_GAP, DEFAULT_MIN_GAP);
         stopLineOffset = positiveDouble(p, STOP_LINE_OFFSET, DEFAULT_STOP_LINE_OFFSET);
         intersectionCapacity = positiveInt(p, INTERSECTION_CAPACITY, DEFAULT_INTERSECTION_CAPACITY);
@@ -187,6 +221,15 @@ public final class SimConfig implements LightTimings, RoutingSettings {
 
     public double carDeceleration() {
         return carDeceleration;
+    }
+
+    @Override
+    public VehicleSpec specFor(VehicleKind kind) {
+        return switch (kind) {
+            case CAR -> carSpec;
+            case BUS -> busSpec;
+            case AMBULANCE -> ambulanceSpec;
+        };
     }
 
     public double minGap() {

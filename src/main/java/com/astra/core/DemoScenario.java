@@ -1,20 +1,25 @@
 package com.astra.core;
 
+import com.astra.graph.Graph;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
-import com.astra.graph.algo.Dijkstra;
-import com.astra.model.Car;
 import com.astra.model.Vehicle;
+import com.astra.model.VehicleFactory;
+import com.astra.model.VehicleKind;
+import com.astra.routing.RouteStrategy;
+import com.astra.routing.ShortestDistanceStrategy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-import java.util.function.ToDoubleFunction;
 
-/** Autos con rutas aleatorias que se renuevan al llegar. Temporal: el Día 4 lo reemplaza VehicleSpawner. */
+/**
+ * Autos con destinos aleatorios; al llegar, otro auto sale desde ese destino. Temporal: el Día 4 lo reemplaza
+ * VehicleSpawner.
+ */
 public final class DemoScenario {
 
     private DemoScenario() {
@@ -24,7 +29,8 @@ public final class DemoScenario {
     public static void seed(WorldState world, SimConfig cfg, long seed) {
         RoadGraph graph = world.graph();
         var random = new Random(seed);
-        var dijkstra = new Dijkstra<Intersection, Road>();
+        var factory = new VehicleFactory(cfg);
+        RouteStrategy strategy = new ShortestDistanceStrategy();
         // Orden fijo para que la semilla sea reproducible.
         List<Intersection> intersections = new ArrayList<>(graph.vertices());
         intersections.sort(Comparator.comparing(Intersection::id));
@@ -33,43 +39,45 @@ public final class DemoScenario {
         Collections.shuffle(origins, random);
         for (int i = 0; i < cfg.demoCarCount(); i++) {
             Intersection origin = origins.get(i % origins.size());
-            List<Road> route = randomRoute(graph, dijkstra, intersections, random, origin, null)
+            Intersection destination = randomDestination(graph, strategy, intersections, random, origin, null)
                     .orElseThrow(() -> new IllegalStateException("No route from " + origin.id()));
-            world.addVehicle(new Car(route, cfg.carMaxSpeed(), cfg.carAcceleration(), cfg.carDeceleration()));
+            world.addVehicle(factory.create(VehicleKind.CAR, strategy, origin, destination, graph));
         }
 
-        world.setOnVehicleFinished(vehicle -> reroute(vehicle, graph, dijkstra, intersections, random));
+        world.setOnVehicleFinished(vehicle -> replace(world, factory, vehicle, intersections, random));
     }
 
-    private static void reroute(Vehicle vehicle, RoadGraph graph, Dijkstra<Intersection, Road> dijkstra,
+    private static void replace(WorldState world, VehicleFactory factory, Vehicle arrived,
             List<Intersection> intersections, Random random) {
-        randomRoute(graph, dijkstra, intersections, random, vehicle.destination(), vehicle.currentRoad())
-                .ifPresent(vehicle::assignRoute);
+        Intersection origin = arrived.destination();
+        randomDestination(world.graph(), arrived.strategy(), intersections, random, origin, arrived.currentRoad())
+                .ifPresent(destination -> world.addVehicle(
+                        factory.create(arrived.kind(), arrived.strategy(), origin, destination, world.graph())));
     }
 
-    // Sin giro en U, salvo que sea la única salida (callejón sin salida).
-    static Optional<List<Road>> randomRoute(RoadGraph graph, Dijkstra<Intersection, Road> dijkstra,
+    // Sin giro en U al salir, salvo que sea la única opción (callejón sin salida).
+    static Optional<Intersection> randomDestination(Graph<Intersection, Road> graph, RouteStrategy strategy,
             List<Intersection> intersections, Random random, Intersection origin, Road arrivedVia) {
-        ToDoubleFunction<Road> noUTurn = road -> isUTurn(road, arrivedVia) ? Double.POSITIVE_INFINITY : road.weight();
-        Optional<List<Road>> route = firstReachable(graph, dijkstra, intersections, random, origin, noUTurn);
-        return route.isPresent() ? route : firstReachable(graph, dijkstra, intersections, random, origin, Road::weight);
+        List<Intersection> candidates = new ArrayList<>(intersections);
+        candidates.remove(origin);
+        Collections.shuffle(candidates, random);
+        Intersection fallback = null;
+        for (Intersection candidate : candidates) {
+            List<Road> route = strategy.route(graph, origin, candidate);
+            if (route.isEmpty()) {
+                continue;
+            }
+            if (!isUTurn(route.get(0), arrivedVia)) {
+                return Optional.of(candidate);
+            }
+            if (fallback == null) {
+                fallback = candidate;
+            }
+        }
+        return Optional.ofNullable(fallback);
     }
 
     private static boolean isUTurn(Road road, Road arrivedVia) {
         return arrivedVia != null && road.from().equals(arrivedVia.to()) && road.to().equals(arrivedVia.from());
-    }
-
-    private static Optional<List<Road>> firstReachable(RoadGraph graph, Dijkstra<Intersection, Road> dijkstra,
-            List<Intersection> intersections, Random random, Intersection origin, ToDoubleFunction<Road> weight) {
-        List<Intersection> candidates = new ArrayList<>(intersections);
-        candidates.remove(origin);
-        while (!candidates.isEmpty()) {
-            Intersection destination = candidates.remove(random.nextInt(candidates.size()));
-            List<Road> route = dijkstra.shortestPath(graph, origin, destination, weight);
-            if (!route.isEmpty()) {
-                return Optional.of(route);
-            }
-        }
-        return Optional.empty();
     }
 }
