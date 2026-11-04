@@ -206,6 +206,10 @@ lights.allRedSeconds=1
 smart.queueThreshold=5
 smart.maxExtensionSeconds=6
 spawn.intervalMillis=1500
+spawn.seed=42
+spawn.weight.car=0.75
+spawn.weight.bus=0.20
+spawn.weight.ambulance=0.05
 vehicle.maxCount=150
 vehicle.car.maxSpeed=14
 vehicle.car.acceleration=3
@@ -226,10 +230,11 @@ intersection.boxLength=16
 intersection.approachMargin=2
 routing.congestionFactor=2.0
 routing.randomJitter=0.6
+routing.weight.shortest=0.5
+routing.weight.leastCongested=0.3
+routing.weight.random=0.2
 emergency.preemptDistance=80
 emergency.maxSeconds=30
-demo.carCount=4
-demo.seed=42
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
 ```
@@ -259,7 +264,11 @@ log.file=logs/astra.log
   al salir del box; sigue necesitando reservar la zona.
 - `emergency.maxSeconds`: límite de seguridad de `EmergencyState`; si nadie lo libera antes, el semáforo
   sigue solo con el amarillo de ese eje.
-- `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
+- `spawn.*`: `VehicleSpawner` corre dentro del tick (hilo `astra-engine`) y cada `spawn.intervalMillis` de
+  tiempo simulado genera un vehículo entre dos intersecciones del borde del mapa, si hay menos de
+  `vehicle.maxCount` y su primera vía tiene espacio. `spawn.seed` lo hace reproducible.
+- `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
+  (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
 
 ---
 

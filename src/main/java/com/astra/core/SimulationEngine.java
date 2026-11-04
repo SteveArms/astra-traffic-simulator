@@ -6,7 +6,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Bucle de paso fijo en el hilo {@code astra-engine}; publica un {@link WorldSnapshot} por tick. */
+/**
+ * Bucle de paso fijo en el hilo {@code astra-engine}: genera vehículos, actualiza el mundo y publica un
+ * {@link WorldSnapshot} por tick.
+ */
 public final class SimulationEngine {
 
     public static final String THREAD_NAME = "astra-engine";
@@ -15,6 +18,8 @@ public final class SimulationEngine {
     private static final double MILLIS_PER_SECOND = 1_000.0;
 
     private final WorldState world;
+    // null: sin generación de vehículos (tests).
+    private final VehicleSpawner spawner;
     private final long tickMillis;
     private final double dtSeconds;
     private final AtomicReference<WorldSnapshot> latest = new AtomicReference<>(WorldSnapshot.EMPTY);
@@ -25,7 +30,12 @@ public final class SimulationEngine {
     private double simTimeSeconds;
 
     public SimulationEngine(SimConfig config, WorldState world) {
+        this(config, world, null);
+    }
+
+    public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner) {
         this.world = Objects.requireNonNull(world, "world");
+        this.spawner = spawner;
         this.tickMillis = config.tickMillis().toMillis();
         this.dtSeconds = tickMillis / MILLIS_PER_SECOND;
     }
@@ -87,6 +97,9 @@ public final class SimulationEngine {
     }
 
     private void tick() {
+        if (spawner != null) {
+            spawner.update(dtSeconds);
+        }
         world.update(dtSeconds);
         tick++;
         simTimeSeconds += dtSeconds;

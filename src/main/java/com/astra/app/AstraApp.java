@@ -1,9 +1,9 @@
 package com.astra.app;
 
-import com.astra.core.DemoScenario;
 import com.astra.core.IntersectionZones;
 import com.astra.core.SimConfig;
 import com.astra.core.SimulationEngine;
+import com.astra.core.VehicleSpawner;
 import com.astra.core.WorldState;
 import com.astra.traffic.LightController;
 import com.astra.util.MapLoader;
@@ -29,8 +29,7 @@ public final class AstraApp extends Application {
         MapLoader.LoadedMap map = MapLoader.load(config.mapFile());
         lights = new LightController(map.graph(), config);
         var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config));
-        DemoScenario.seed(world, config, config.demoSeed());
-        engine = new SimulationEngine(config, world);
+        engine = new SimulationEngine(config, world, new VehicleSpawner(world, config));
         renderer = new CityRenderer(map.graph(), engine::latestSnapshot);
 
         var root = new BorderPane();

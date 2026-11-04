@@ -9,7 +9,9 @@ import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
 import com.astra.traffic.LightColor;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class WorldSnapshotTest {
@@ -21,7 +23,7 @@ class WorldSnapshotTest {
 
     @Test
     void vehiclesListIsUnmodifiable() {
-        var snapshot = new WorldSnapshot(1, 0.05, List.of(CAR), List.of(LIGHT));
+        var snapshot = snapshot(List.of(CAR), List.of(LIGHT));
 
         assertThrows(UnsupportedOperationException.class, () -> snapshot.vehicles().add(BUS));
         assertThrows(UnsupportedOperationException.class, () -> snapshot.vehicles().clear());
@@ -30,7 +32,7 @@ class WorldSnapshotTest {
     @Test
     void changingOriginalListDoesNotAffectSnapshot() {
         var original = new ArrayList<>(List.of(CAR));
-        var snapshot = new WorldSnapshot(1, 0.05, original, List.of());
+        var snapshot = snapshot(original, List.of());
 
         original.add(BUS);
         original.remove(CAR);
@@ -46,11 +48,28 @@ class WorldSnapshotTest {
         assertEquals(0, WorldSnapshot.EMPTY.vehicleCount());
         assertTrue(WorldSnapshot.EMPTY.vehicles().isEmpty());
         assertEquals(0, WorldSnapshot.EMPTY.lightCount());
+        assertEquals(0, WorldSnapshot.EMPTY.spawned());
+        assertEquals(0, WorldSnapshot.EMPTY.activeCount(VehicleKind.BUS));
+    }
+
+    @Test
+    void countersAndActiveByKindAreCopied() {
+        var active = new EnumMap<VehicleKind, Integer>(VehicleKind.class);
+        active.put(VehicleKind.CAR, 1);
+        var snapshot = new WorldSnapshot(1, 0.05, List.of(CAR), List.of(), 5, 4, active);
+
+        active.put(VehicleKind.CAR, 9);
+
+        assertEquals(5, snapshot.spawned());
+        assertEquals(4, snapshot.despawned());
+        assertEquals(1, snapshot.activeCount(VehicleKind.CAR));
+        assertEquals(0, snapshot.activeCount(VehicleKind.AMBULANCE));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.activeByKind().clear());
     }
 
     @Test
     void nullsAreRejected() {
-        assertThrows(NullPointerException.class, () -> new WorldSnapshot(1, 0, null, List.of()));
+        assertThrows(NullPointerException.class, () -> new WorldSnapshot(1, 0, null, List.of(), 0, 0, Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new VehicleView(null, VehicleKind.CAR, 0, 0, 0, 0, 12, "SHORTEST"));
         assertThrows(NullPointerException.class,
@@ -60,12 +79,16 @@ class WorldSnapshotTest {
     @Test
     void lightsListIsCopiedAndUnmodifiable() {
         var original = new ArrayList<>(List.of(LIGHT));
-        var snapshot = new WorldSnapshot(1, 0.05, List.of(), original);
+        var snapshot = snapshot(List.of(), original);
 
         original.clear();
 
         assertEquals(List.of(LIGHT), snapshot.lights());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.lights().add(LIGHT));
+    }
+
+    private static WorldSnapshot snapshot(List<VehicleView> vehicles, List<LightView> lights) {
+        return new WorldSnapshot(1, 0.05, vehicles, lights, 0, 0, Map.of());
     }
 
     @Test

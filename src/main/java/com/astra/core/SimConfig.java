@@ -3,7 +3,10 @@ package com.astra.core;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleSpec;
 import com.astra.model.VehicleSpecs;
+import com.astra.routing.LeastCongestedStrategy;
+import com.astra.routing.RandomRouteStrategy;
 import com.astra.routing.RoutingSettings;
+import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightTimings;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,6 +15,10 @@ import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -53,8 +60,13 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     static final String ROUTING_RANDOM_JITTER = "routing.randomJitter";
     static final String EMERGENCY_PREEMPT_DISTANCE = "emergency.preemptDistance";
     static final String EMERGENCY_MAX_SECONDS = "emergency.maxSeconds";
-    static final String DEMO_CAR_COUNT = "demo.carCount";
-    static final String DEMO_SEED = "demo.seed";
+    static final String SPAWN_SEED = "spawn.seed";
+    static final String SPAWN_WEIGHT_CAR = "spawn.weight.car";
+    static final String SPAWN_WEIGHT_BUS = "spawn.weight.bus";
+    static final String SPAWN_WEIGHT_AMBULANCE = "spawn.weight.ambulance";
+    static final String ROUTING_WEIGHT_SHORTEST = "routing.weight.shortest";
+    static final String ROUTING_WEIGHT_LEAST_CONGESTED = "routing.weight.leastCongested";
+    static final String ROUTING_WEIGHT_RANDOM = "routing.weight.random";
     static final String MAP_FILE = "map.file";
     static final String LOG_FILE = "log.file";
 
@@ -88,8 +100,13 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private static final double DEFAULT_ROUTING_RANDOM_JITTER = 0.6;
     private static final double DEFAULT_EMERGENCY_PREEMPT_DISTANCE = 80;
     private static final long DEFAULT_EMERGENCY_MAX_SECONDS = 30;
-    private static final int DEFAULT_DEMO_CAR_COUNT = 4;
-    private static final long DEFAULT_DEMO_SEED = 42;
+    private static final long DEFAULT_SPAWN_SEED = 42;
+    private static final double DEFAULT_SPAWN_WEIGHT_CAR = 0.75;
+    private static final double DEFAULT_SPAWN_WEIGHT_BUS = 0.20;
+    private static final double DEFAULT_SPAWN_WEIGHT_AMBULANCE = 0.05;
+    private static final double DEFAULT_ROUTING_WEIGHT_SHORTEST = 0.5;
+    private static final double DEFAULT_ROUTING_WEIGHT_LEAST_CONGESTED = 0.3;
+    private static final double DEFAULT_ROUTING_WEIGHT_RANDOM = 0.2;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
 
@@ -116,8 +133,9 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private final double routingRandomJitter;
     private final double emergencyPreemptDistance;
     private final Duration emergencyMaxSeconds;
-    private final int demoCarCount;
-    private final long demoSeed;
+    private final long spawnSeed;
+    private final Map<VehicleKind, Double> spawnWeights;
+    private final Map<String, Double> routingWeights;
     private final String mapFile;
     private final String logFile;
 
@@ -155,8 +173,21 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         emergencyPreemptDistance = positiveDouble(p, EMERGENCY_PREEMPT_DISTANCE, DEFAULT_EMERGENCY_PREEMPT_DISTANCE);
         emergencyMaxSeconds = Duration.ofSeconds(
                 positiveLong(p, EMERGENCY_MAX_SECONDS, DEFAULT_EMERGENCY_MAX_SECONDS));
-        demoCarCount = positiveInt(p, DEMO_CAR_COUNT, DEFAULT_DEMO_CAR_COUNT);
-        demoSeed = positiveLong(p, DEMO_SEED, DEFAULT_DEMO_SEED);
+        spawnSeed = positiveLong(p, SPAWN_SEED, DEFAULT_SPAWN_SEED);
+        var kinds = new EnumMap<VehicleKind, Double>(VehicleKind.class);
+        kinds.put(VehicleKind.CAR, nonNegativeDouble(p, SPAWN_WEIGHT_CAR, DEFAULT_SPAWN_WEIGHT_CAR));
+        kinds.put(VehicleKind.BUS, nonNegativeDouble(p, SPAWN_WEIGHT_BUS, DEFAULT_SPAWN_WEIGHT_BUS));
+        kinds.put(VehicleKind.AMBULANCE, nonNegativeDouble(p, SPAWN_WEIGHT_AMBULANCE, DEFAULT_SPAWN_WEIGHT_AMBULANCE));
+        spawnWeights = Collections.unmodifiableMap(requireSomeWeight(kinds, "spawn.weight.*"));
+        // Orden fijo de iteración: la selección ponderada debe ser reproducible con la semilla.
+        var strategies = new LinkedHashMap<String, Double>();
+        strategies.put(ShortestDistanceStrategy.NAME,
+                nonNegativeDouble(p, ROUTING_WEIGHT_SHORTEST, DEFAULT_ROUTING_WEIGHT_SHORTEST));
+        strategies.put(LeastCongestedStrategy.NAME,
+                nonNegativeDouble(p, ROUTING_WEIGHT_LEAST_CONGESTED, DEFAULT_ROUTING_WEIGHT_LEAST_CONGESTED));
+        strategies.put(RandomRouteStrategy.NAME,
+                nonNegativeDouble(p, ROUTING_WEIGHT_RANDOM, DEFAULT_ROUTING_WEIGHT_RANDOM));
+        routingWeights = Collections.unmodifiableMap(requireSomeWeight(strategies, "routing.weight.*"));
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
     }
@@ -229,8 +260,18 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         return carAcceleration;
     }
 
-    public long demoSeed() {
-        return demoSeed;
+    public long spawnSeed() {
+        return spawnSeed;
+    }
+
+    /** Peso relativo de cada tipo, en el orden de {@link VehicleKind}; la suma es &gt; 0. */
+    public Map<VehicleKind, Double> spawnWeights() {
+        return spawnWeights;
+    }
+
+    /** Peso relativo de cada estrategia por su {@code name()}, en orden fijo; la suma es &gt; 0. */
+    public Map<String, Double> routingWeights() {
+        return routingWeights;
     }
 
     public double carDeceleration() {
@@ -280,10 +321,6 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         return emergencyPreemptDistance;
     }
 
-    public int demoCarCount() {
-        return demoCarCount;
-    }
-
     public String mapFile() {
         return mapFile;
     }
@@ -307,6 +344,31 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
             throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " must be > 0");
         }
         return value;
+    }
+
+    private static double nonNegativeDouble(Properties p, String key, double defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        double value;
+        try {
+            value = Double.parseDouble(raw.strip());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw + "' is not a number", e);
+        }
+        if (!(value >= 0) || !Double.isFinite(value)) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " must be >= 0");
+        }
+        return value;
+    }
+
+    private static <K, M extends Map<K, Double>> M requireSomeWeight(M weights, String keys) {
+        double total = weights.values().stream().mapToDouble(Double::doubleValue).sum();
+        if (!(total > 0)) {
+            throw new IllegalArgumentException("Invalid values for '" + keys + "': at least one weight must be > 0");
+        }
+        return weights;
     }
 
     private static long positiveLong(Properties p, String key, long defaultValue) {

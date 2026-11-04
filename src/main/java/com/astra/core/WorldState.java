@@ -4,7 +4,9 @@ import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.Vehicle;
+import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.routing.RoadOccupancy;
 import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
 import com.astra.traffic.LightController;
@@ -13,12 +15,13 @@ import com.astra.traffic.TrafficLight;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Vehículos en circulación; cada tick limita su avance por el de adelante, el semáforo y la zona.
@@ -35,11 +38,15 @@ public final class WorldState {
     private final double boxLength;
     private final double approachMargin;
     private final double preemptDistance;
+    // Largo de vía que ocupa un auto con su hueco: base de la capacidad aproximada de cada vía.
+    private final double carFootprint;
     private final List<Vehicle> vehicles = new ArrayList<>();
     private final Map<String, IntersectionZone> held = new HashMap<>();
     // Intersección cuyo semáforo pidió cada vehículo de emergencia.
     private final Map<String, Intersection> preempted = new HashMap<>();
-    private Consumer<Vehicle> onVehicleFinished = vehicle -> { };
+    private final AtomicReference<RoadOccupancy> occupancy = new AtomicReference<>(RoadOccupancy.EMPTY);
+    private long spawned;
+    private long despawned;
 
     public WorldState(RoadGraph graph, SimConfig cfg, LightController lights, IntersectionZones zones) {
         this.graph = Objects.requireNonNull(graph, "graph");
@@ -50,6 +57,7 @@ public final class WorldState {
         this.boxLength = cfg.boxLength();
         this.approachMargin = cfg.approachMargin();
         this.preemptDistance = cfg.emergencyPreemptDistance();
+        this.carFootprint = cfg.minGap() + cfg.specFor(VehicleKind.CAR).length();
     }
 
     public RoadGraph graph() {
@@ -67,6 +75,7 @@ public final class WorldState {
      */
     public void addVehicle(Vehicle vehicle) {
         vehicles.add(Objects.requireNonNull(vehicle, "vehicle"));
+        spawned++;
         IntersectionZone start = zones.zoneOf(vehicle.currentRoad().from());
         if (start.tryEnter(vehicle.id())) {
             held.put(vehicle.id(), start);
@@ -74,34 +83,51 @@ public final class WorldState {
     }
 
     /**
-     * El vehículo que llega siempre se elimina; el gancho puede agregar otro con {@link #addVehicle}.
+     * Si la primera vía tiene espacio para un vehículo nuevo de largo {@code length} en su inicio: el último
+     * vehículo en ella tiene {@code rearOffset >= minGap + length}.
      *
-     * @implNote The hook runs on astra-engine, after the finished vehicle released its zones.
+     * @implNote Called from astra-engine.
      */
-    public void setOnVehicleFinished(Consumer<Vehicle> hook) {
-        onVehicleFinished = Objects.requireNonNull(hook, "hook");
+    public boolean hasRoomAtStart(Road road, double length) {
+        for (Vehicle vehicle : vehicles) {
+            if (vehicle.currentRoad().equals(road) && vehicle.rearOffset() < minGap + length) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    /** @implNote Called from astra-engine. */
+    /**
+     * Ocupación de cada vía al final del último tick, entre 0 y 1.
+     *
+     * @implNote Safe to call from any thread.
+     */
+    public RoadOccupancy currentOccupancy() {
+        return occupancy.get();
+    }
+
+    /**
+     * El vehículo que termina su ruta se elimina, libera sus zonas y cuenta como salido.
+     *
+     * @implNote Called from astra-engine.
+     */
     public void update(double dtSeconds) {
         Map<Road, List<Vehicle>> byRoad = vehiclesByRoad();
-        // Tamaño fijo: el gancho puede agregar vehículos durante el recorrido.
-        int count = vehicles.size();
-        for (int i = 0; i < count; i++) {
-            Vehicle vehicle = vehicles.get(i);
+        for (Vehicle vehicle : vehicles) {
             Road before = vehicle.currentRoad();
             requestPreemption(vehicle);
             vehicle.update(dtSeconds, freeDistance(vehicle, byRoad));
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
                 releaseAll(vehicle);
-                onVehicleFinished.accept(vehicle);
+                despawned++;
             } else if (!vehicle.currentRoad().equals(before) && vehicle.strategy().isAdaptive()) {
                 vehicle.reroute(graph, vehicle.currentRoad().to());
             }
             relocate(byRoad, vehicle, before);
         }
         vehicles.removeIf(Vehicle::isFinished);
+        occupancy.set(measureOccupancy());
     }
 
     /** @implNote Called from astra-engine. */
@@ -120,7 +146,33 @@ public final class WorldState {
                     state.name(), zone.occupancy(), zone.capacity()));
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
-        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews);
+        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind());
+    }
+
+    /** @implNote Called from astra-engine. */
+    public long spawned() {
+        return spawned;
+    }
+
+    /** @implNote Called from astra-engine. */
+    public long despawned() {
+        return despawned;
+    }
+
+    /**
+     * Todos los tipos, con 0 si no hay ninguno.
+     *
+     * @implNote Called from astra-engine.
+     */
+    public Map<VehicleKind, Integer> activeByKind() {
+        Map<VehicleKind, Integer> counts = new EnumMap<>(VehicleKind.class);
+        for (VehicleKind kind : VehicleKind.values()) {
+            counts.put(kind, 0);
+        }
+        for (Vehicle vehicle : vehicles) {
+            counts.merge(vehicle.kind(), 1, Integer::sum);
+        }
+        return counts;
     }
 
     /** @implNote Called from astra-engine. */
@@ -219,6 +271,20 @@ public final class WorldState {
         if (at != null) {
             lights.release(at, vehicleId);
         }
+    }
+
+    // Vehículos en la vía / capacidad aproximada (length / (minGap + largo de auto) * lanes), tope 1.
+    private RoadOccupancy measureOccupancy() {
+        Map<Road, Integer> counts = new HashMap<>();
+        for (Vehicle vehicle : vehicles) {
+            counts.merge(vehicle.currentRoad(), 1, Integer::sum);
+        }
+        Map<Road, Double> ratios = new HashMap<>();
+        counts.forEach((road, count) -> {
+            double capacity = road.length() / carFootprint * road.lanes();
+            ratios.put(road, Math.min(1.0, count / capacity));
+        });
+        return new RoadOccupancy(ratios);
     }
 
     private Map<Road, List<Vehicle>> vehiclesByRoad() {

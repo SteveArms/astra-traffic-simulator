@@ -13,7 +13,6 @@ import com.astra.model.Vehicle;
 import com.astra.model.VehicleSpec;
 import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightController;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.AfterEach;
@@ -103,28 +102,22 @@ class SimulationEngineTest {
     }
 
     @Test
-    void finishedVehicleIsRemovedAndHookCanAddReplacement() {
-        Vehicle leaving = car(shortRoad, 1_000);
-        Vehicle replaced = car(shortRoad, 1_000);
-        Vehicle replacement = car(longRoad, ACCELERATION);
-        List<Vehicle> finished = new ArrayList<>();
-        world.setOnVehicleFinished(vehicle -> {
-            finished.add(vehicle);
-            if (vehicle == replaced) {
-                world.addVehicle(replacement);
-            }
-        });
-        world.addVehicle(leaving);
-        world.addVehicle(replaced);
+    void finishedVehiclesAreRemovedAndCounted() {
+        Vehicle staying = car(longRoad, ACCELERATION);
+        world.addVehicle(car(shortRoad, 1_000));
+        world.addVehicle(car(shortRoad, 1_000));
+        world.addVehicle(staying);
 
-        // Con minGap, replaced espera a que leaving salga de la vía.
+        // Con minGap, el segundo espera a que el primero salga de la vía.
         for (int i = 0; i < 100; i++) {
             engine.step();
         }
 
-        assertEquals(List.of(leaving, replaced), finished);
-        assertEquals(1, engine.latestSnapshot().vehicleCount());
-        assertEquals(replacement.id(), engine.latestSnapshot().vehicles().get(0).id());
+        WorldSnapshot snapshot = engine.latestSnapshot();
+        assertEquals(3, snapshot.spawned());
+        assertEquals(2, snapshot.despawned());
+        assertEquals(1, snapshot.vehicleCount());
+        assertEquals(staying.id(), snapshot.vehicles().get(0).id());
     }
 
     private static Vehicle car(Road road, double acceleration) {

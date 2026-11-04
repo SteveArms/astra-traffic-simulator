@@ -24,7 +24,6 @@ import com.astra.traffic.RedState;
 import com.astra.traffic.TestLights;
 import com.astra.traffic.TrafficLight;
 import com.astra.traffic.YellowState;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -272,20 +271,42 @@ class DrivingTest {
     }
 
     @Test
-    void replacementCarKeepsZoneUntilItLeavesTheBox() {
+    void newCarKeepsOriginZoneUntilItLeavesTheBox() {
+        build(SimConfig.load());
+        Vehicle car = addCar(eastOut);
+        assertTrue(zone.contains(car.id()), "new car does not hold the zone inside the box");
+
+        stepUntil(() -> car.offset() > cfg.boxLength());
+        assertEquals(0, zone.occupancy());
+    }
+
+    @Test
+    void finishedVehicleIsRemovedAndCounted() {
         build(SimConfig.load());
         TestLights.force(light, new GreenState(Axis.EW));
         Vehicle car = addCar(westIn);
-        List<Vehicle> replacements = new ArrayList<>();
-        world.setOnVehicleFinished(vehicle -> replacements.add(addCar(eastOut)));
 
-        stepUntil(() -> !replacements.isEmpty());
-        Vehicle replacement = replacements.get(0);
-        assertFalse(world.vehicles().contains(car));
-        assertFalse(zone.contains(car.id()));
-        assertTrue(zone.contains(replacement.id()), "replacement does not hold the zone inside the box");
+        stepUntil(() -> !world.vehicles().contains(car));
 
-        stepUntil(() -> replacement.offset() > cfg.boxLength());
+        assertEquals(1, world.spawned());
+        assertEquals(1, world.despawned());
         assertEquals(0, zone.occupancy());
+        WorldSnapshot snapshot = engine.latestSnapshot();
+        assertEquals(1, snapshot.despawned());
+        assertEquals(0, snapshot.activeCount(VehicleKind.CAR));
+    }
+
+    @Test
+    void occupancyCountsVehiclesPerRoadAndCapacity() {
+        build(SimConfig.load());
+        TestLights.force(light, new RedState(Axis.NS));
+        Vehicle first = addCar(westIn, eastOut);
+        stepUntil(() -> first.rearOffset() > cfg.minGap() + 1);
+        addCar(westIn, eastOut);
+        engine.step();
+
+        double capacity = westIn.length() / (cfg.minGap() + cfg.specFor(VehicleKind.CAR).length()) * westIn.lanes();
+        assertEquals(2 / capacity, world.currentOccupancy().of(westIn), 1e-9);
+        assertEquals(0, world.currentOccupancy().of(eastOut));
     }
 }

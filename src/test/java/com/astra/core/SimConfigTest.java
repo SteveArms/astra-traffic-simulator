@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleSpec;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,8 +41,10 @@ class SimConfigTest {
         assertEquals(0.6, config.randomJitter());
         assertEquals(80, config.emergencyPreemptDistance());
         assertEquals(Duration.ofSeconds(30), config.emergencyMaxSeconds());
-        assertEquals(4, config.demoCarCount());
-        assertEquals(42, config.demoSeed());
+        assertEquals(42, config.spawnSeed());
+        assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
+                config.spawnWeights());
+        assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }
@@ -70,8 +74,10 @@ class SimConfigTest {
         assertEquals(0.6, config.randomJitter());
         assertEquals(80, config.emergencyPreemptDistance());
         assertEquals(Duration.ofSeconds(30), config.emergencyMaxSeconds());
-        assertEquals(4, config.demoCarCount());
-        assertEquals(42, config.demoSeed());
+        assertEquals(42, config.spawnSeed());
+        assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
+                config.spawnWeights());
+        assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
         assertEquals("logs/astra.log", config.logFile());
     }
@@ -141,7 +147,7 @@ class SimConfigTest {
         SimConfig.CAR_LENGTH, SimConfig.BUS_MAX_SPEED, SimConfig.BUS_ACCELERATION, SimConfig.BUS_DECELERATION,
         SimConfig.BUS_LENGTH, SimConfig.AMBULANCE_MAX_SPEED, SimConfig.AMBULANCE_ACCELERATION,
         SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH, SimConfig.EMERGENCY_PREEMPT_DISTANCE,
-        SimConfig.EMERGENCY_MAX_SECONDS
+        SimConfig.EMERGENCY_MAX_SECONDS, SimConfig.SPAWN_SEED
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();
@@ -160,6 +166,40 @@ class SimConfigTest {
 
         assertEquals(new VehicleSpec(9, 1.5, 4, 25), config.specFor(VehicleKind.BUS));
         assertEquals(new VehicleSpec(14, 3, 6, 12), config.specFor(VehicleKind.CAR));
+    }
+
+    @Test
+    void weightsKeepAFixedOrderAndAcceptZero() {
+        var props = new Properties();
+        props.setProperty(SimConfig.SPAWN_WEIGHT_AMBULANCE, "0");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(List.of(VehicleKind.CAR, VehicleKind.BUS, VehicleKind.AMBULANCE),
+                List.copyOf(config.spawnWeights().keySet()));
+        assertEquals(List.of("SHORTEST", "LEAST_CONGESTED", "RANDOM"), List.copyOf(config.routingWeights().keySet()));
+        assertEquals(0, config.spawnWeights().get(VehicleKind.AMBULANCE));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-0.1", "abc", "NaN", "Infinity"})
+    void invalidWeightThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.ROUTING_WEIGHT_RANDOM, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.ROUTING_WEIGHT_RANDOM), e.getMessage());
+    }
+
+    @Test
+    void allZeroWeightsThrow() {
+        var props = new Properties();
+        props.setProperty(SimConfig.SPAWN_WEIGHT_CAR, "0");
+        props.setProperty(SimConfig.SPAWN_WEIGHT_BUS, "0");
+        props.setProperty(SimConfig.SPAWN_WEIGHT_AMBULANCE, "0");
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains("spawn.weight"), e.getMessage());
     }
 
     private static void assertSpecs(SimConfig config) {
