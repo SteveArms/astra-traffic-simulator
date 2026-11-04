@@ -11,12 +11,12 @@ import org.junit.jupiter.api.Test;
 
 class LightStateTest {
 
-    private record FixedTimings(Duration greenSeconds, Duration yellowSeconds, Duration allRedSeconds)
-            implements LightTimings {
+    private record FixedTimings(Duration greenSeconds, Duration yellowSeconds, Duration allRedSeconds,
+            Duration emergencyMaxSeconds) implements LightTimings {
     }
 
     private static final LightTimings TIMINGS =
-            new FixedTimings(Duration.ofSeconds(7), Duration.ofSeconds(3), Duration.ofSeconds(1));
+            new FixedTimings(Duration.ofSeconds(7), Duration.ofSeconds(3), Duration.ofSeconds(1), Duration.ofSeconds(30));
 
     @Test
     void twelveTransitionsFollowTheExactCycle() {
@@ -68,5 +68,16 @@ class LightStateTest {
         assertEquals("GREEN(NS)", new GreenState(Axis.NS).name());
         assertEquals("YELLOW(EW)", new YellowState(Axis.EW).name());
         assertEquals("RED(next NS)", new RedState(Axis.NS).name());
+        assertEquals("EMERGENCY-EW", new EmergencyState(Axis.EW).name());
+    }
+
+    @Test
+    void emergencyGivesGreenOnlyToItsAxisAndThenYellow() {
+        var emergency = new EmergencyState(Axis.EW);
+
+        assertEquals(LightColor.GREEN, emergency.colorFor(Axis.EW));
+        assertEquals(LightColor.RED, emergency.colorFor(Axis.NS));
+        assertEquals(TIMINGS.emergencyMaxSeconds(), emergency.duration(TIMINGS));
+        assertEquals(new YellowState(Axis.EW), emergency.next());
     }
 }

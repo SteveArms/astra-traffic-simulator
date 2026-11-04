@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
+import com.astra.model.Ambulance;
 import com.astra.model.Bus;
 import com.astra.model.Car;
 import com.astra.model.Vehicle;
@@ -22,6 +23,7 @@ import com.astra.traffic.LightController;
 import com.astra.traffic.RedState;
 import com.astra.traffic.TestLights;
 import com.astra.traffic.TrafficLight;
+import com.astra.traffic.YellowState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -165,6 +167,30 @@ class DrivingTest {
         assertEquals(0, bus.speed(), EPS);
         // Detenidos: el frente del bus queda a minGap del parachoques trasero del auto, no de su frente.
         assertEquals(cfg.minGap() + car.length(), car.offset() - bus.offset(), 0.5);
+    }
+
+    @Test
+    void ambulanceArrivingOnRedCrossesWithoutStopping() {
+        build(SimConfig.load());
+        TestLights.force(light, new GreenState(Axis.NS));
+        Vehicle ambulance = add(new Ambulance(cfg.specFor(VehicleKind.AMBULANCE), SHORTEST, westIn.from(),
+                eastOut.to()), westIn, eastOut);
+        engine.step();
+
+        double minSpeed = Double.POSITIVE_INFINITY;
+        boolean sawEmergency = false;
+        while (!(ambulance.currentRoad().equals(eastOut) && ambulance.offset() > cfg.boxLength())) {
+            engine.step();
+            minSpeed = Math.min(minSpeed, ambulance.speed());
+            sawEmergency |= "EMERGENCY-EW".equals(light.state().name());
+            assertTrue(world.vehicles().contains(ambulance), "ambulance vanished");
+        }
+
+        assertTrue(minSpeed > 0, "ambulance stopped");
+        assertTrue(sawEmergency);
+        assertEquals(new YellowState(Axis.EW), light.state());
+        assertFalse(light.isPreempted());
+        assertEquals(0, zone.occupancy());
     }
 
     @Test

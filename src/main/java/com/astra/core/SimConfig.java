@@ -51,6 +51,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     static final String APPROACH_MARGIN = "intersection.approachMargin";
     static final String ROUTING_CONGESTION_FACTOR = "routing.congestionFactor";
     static final String ROUTING_RANDOM_JITTER = "routing.randomJitter";
+    static final String EMERGENCY_PREEMPT_DISTANCE = "emergency.preemptDistance";
+    static final String EMERGENCY_MAX_SECONDS = "emergency.maxSeconds";
     static final String DEMO_CAR_COUNT = "demo.carCount";
     static final String DEMO_SEED = "demo.seed";
     static final String MAP_FILE = "map.file";
@@ -84,6 +86,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private static final double DEFAULT_APPROACH_MARGIN = 2;
     private static final double DEFAULT_ROUTING_CONGESTION_FACTOR = 2.0;
     private static final double DEFAULT_ROUTING_RANDOM_JITTER = 0.6;
+    private static final double DEFAULT_EMERGENCY_PREEMPT_DISTANCE = 80;
+    private static final long DEFAULT_EMERGENCY_MAX_SECONDS = 30;
     private static final int DEFAULT_DEMO_CAR_COUNT = 4;
     private static final long DEFAULT_DEMO_SEED = 42;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
@@ -110,6 +114,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private final double approachMargin;
     private final double routingCongestionFactor;
     private final double routingRandomJitter;
+    private final double emergencyPreemptDistance;
+    private final Duration emergencyMaxSeconds;
     private final int demoCarCount;
     private final long demoSeed;
     private final String mapFile;
@@ -146,6 +152,9 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         approachMargin = positiveDouble(p, APPROACH_MARGIN, DEFAULT_APPROACH_MARGIN);
         routingCongestionFactor = positiveDouble(p, ROUTING_CONGESTION_FACTOR, DEFAULT_ROUTING_CONGESTION_FACTOR);
         routingRandomJitter = positiveDouble(p, ROUTING_RANDOM_JITTER, DEFAULT_ROUTING_RANDOM_JITTER);
+        emergencyPreemptDistance = positiveDouble(p, EMERGENCY_PREEMPT_DISTANCE, DEFAULT_EMERGENCY_PREEMPT_DISTANCE);
+        emergencyMaxSeconds = Duration.ofSeconds(
+                positiveLong(p, EMERGENCY_MAX_SECONDS, DEFAULT_EMERGENCY_MAX_SECONDS));
         demoCarCount = positiveInt(p, DEMO_CAR_COUNT, DEFAULT_DEMO_CAR_COUNT);
         demoSeed = positiveLong(p, DEMO_SEED, DEFAULT_DEMO_SEED);
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
@@ -189,6 +198,11 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     @Override
     public Duration allRedSeconds() {
         return allRedSeconds;
+    }
+
+    @Override
+    public Duration emergencyMaxSeconds() {
+        return emergencyMaxSeconds;
     }
 
     public int smartQueueThreshold() {
@@ -260,6 +274,10 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     @Override
     public double randomJitter() {
         return routingRandomJitter;
+    }
+
+    public double emergencyPreemptDistance() {
+        return emergencyPreemptDistance;
     }
 
     public int demoCarCount() {

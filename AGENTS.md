@@ -74,7 +74,7 @@ astra-traffic-simulator/
     │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
     │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
     │       ├── traffic/      TrafficLight, LightState, GreenState, YellowState, RedState,
-    │       │                 SmartAdaptiveState, LightController
+    │       │                 SmartAdaptiveState, EmergencyState, LightController
     │       ├── routing/      RouteStrategy, ShortestDistanceStrategy,
     │       │                 LeastCongestedStrategy, RandomRouteStrategy,
     │       │                 RouteStrategies, RoadOccupancy, RoutingSettings
@@ -139,7 +139,10 @@ Reglas:
 // Ciclo: GreenState(NS) → YellowState(NS) → RedState(EW) → GreenState(EW) → YellowState(EW)
 //        → RedState(NS) → …   (RedState(x) = todo en rojo; después se pone en verde x)
 public enum Axis { NS, EW; Axis opposite(); static Axis of(Road road); }
-public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds(); }
+public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds();
+                                Duration emergencyMaxSeconds(); }
+// Emergencia: TrafficLight.preempt(axis, id) → EmergencyState(axis) (axis verde, el otro rojo) hasta que el
+// último vehículo llama a release(id) → YellowState(axis) → ciclo normal.
 public interface LightState {
     LightColor colorFor(Axis axis);
     Duration duration(LightTimings timings);   // SimConfig implementa LightTimings
@@ -223,6 +226,8 @@ intersection.boxLength=16
 intersection.approachMargin=2
 routing.congestionFactor=2.0
 routing.randomJitter=0.6
+emergency.preemptDistance=80
+emergency.maxSeconds=30
 demo.carCount=4
 demo.seed=42
 map.file=maps/city-3x3.json
@@ -249,6 +254,11 @@ log.file=logs/astra.log
   `length * (1 + congestionFactor * ocupación)`, con ocupación entre 0 y 1.
 - `routing.randomJitter`: variación máxima de `RandomRouteStrategy`; el peso de una vía es
   `length * (1 + U[0,1) * randomJitter)`, sorteado una vez por cálculo de ruta.
+- `emergency.preemptDistance`: distancia al centro de la intersección (px) desde la que un vehículo con
+  prioridad de emergencia pone su semáforo en verde (`EmergencyState`) en el eje por donde llega. Lo libera
+  al salir del box; sigue necesitando reservar la zona.
+- `emergency.maxSeconds`: límite de seguridad de `EmergencyState`; si nadie lo libera antes, el semáforo
+  sigue solo con el amarillo de ese eje.
 - `demo.*`: escenario temporal de demostración (se reemplaza por `VehicleSpawner` el Día 4).
 
 ---

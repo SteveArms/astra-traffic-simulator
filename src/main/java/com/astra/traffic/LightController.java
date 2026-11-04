@@ -107,6 +107,26 @@ public final class LightController {
         return light == null ? LightColor.GREEN : light.colorFor(Axis.of(incoming));
     }
 
+    /**
+     * Sin semáforo en {@code incoming.to()} no hace nada.
+     *
+     * @implNote Called from astra-engine or astra-worker-N.
+     */
+    public void preempt(Road incoming, String vehicleId) {
+        TrafficLight light = lights.get(incoming.to());
+        if (light != null) {
+            light.preempt(Axis.of(incoming), vehicleId);
+        }
+    }
+
+    /** @implNote Called from astra-engine or astra-worker-N. */
+    public void release(Intersection intersection, String vehicleId) {
+        TrafficLight light = lights.get(intersection);
+        if (light != null) {
+            light.release(vehicleId);
+        }
+    }
+
     public Collection<TrafficLight> lights() {
         return lights.values();
     }

@@ -20,12 +20,12 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(10)
 class TrafficLightTest {
 
-    private record FixedTimings(Duration greenSeconds, Duration yellowSeconds, Duration allRedSeconds)
-            implements LightTimings {
+    private record FixedTimings(Duration greenSeconds, Duration yellowSeconds, Duration allRedSeconds,
+            Duration emergencyMaxSeconds) implements LightTimings {
     }
 
     private static final LightTimings FAST =
-            new FixedTimings(Duration.ofMillis(100), Duration.ofMillis(50), Duration.ofMillis(50));
+            new FixedTimings(Duration.ofMillis(100), Duration.ofMillis(50), Duration.ofMillis(50), Duration.ofSeconds(30));
 
     private RoadGraph graph;
     private LightController controller;

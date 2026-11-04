@@ -34,8 +34,11 @@ public final class WorldState {
     private final double stopLineOffset;
     private final double boxLength;
     private final double approachMargin;
+    private final double preemptDistance;
     private final List<Vehicle> vehicles = new ArrayList<>();
     private final Map<String, IntersectionZone> held = new HashMap<>();
+    // Intersección cuyo semáforo pidió cada vehículo de emergencia.
+    private final Map<String, Intersection> preempted = new HashMap<>();
     private Consumer<Vehicle> onVehicleFinished = vehicle -> { };
 
     public WorldState(RoadGraph graph, SimConfig cfg, LightController lights, IntersectionZones zones) {
@@ -46,6 +49,7 @@ public final class WorldState {
         this.stopLineOffset = cfg.stopLineOffset();
         this.boxLength = cfg.boxLength();
         this.approachMargin = cfg.approachMargin();
+        this.preemptDistance = cfg.emergencyPreemptDistance();
     }
 
     public RoadGraph graph() {
@@ -86,6 +90,7 @@ public final class WorldState {
         for (int i = 0; i < count; i++) {
             Vehicle vehicle = vehicles.get(i);
             Road before = vehicle.currentRoad();
+            requestPreemption(vehicle);
             vehicle.update(dtSeconds, freeDistance(vehicle, byRoad));
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
@@ -176,18 +181,44 @@ public final class WorldState {
         return onRoad.get(onRoad.size() - 1).rearOffset() - minGap;
     }
 
+    // La preferencia solo adelanta el verde: la zona se sigue reservando con tryEnter.
+    private void requestPreemption(Vehicle vehicle) {
+        if (!vehicle.hasEmergencyPriority() || vehicle.remainingOnRoad() > preemptDistance) {
+            return;
+        }
+        Road road = vehicle.currentRoad();
+        Intersection target = road.to();
+        if (target.equals(preempted.get(vehicle.id())) || lights.lightAt(target).isEmpty()) {
+            return;
+        }
+        releasePreemption(vehicle.id());
+        lights.preempt(road, vehicle.id());
+        preempted.put(vehicle.id(), target);
+    }
+
     private void releaseIfClear(Vehicle vehicle) {
         IntersectionZone zone = held.get(vehicle.id());
         if (zone != null && vehicle.currentRoad().from().equals(zone.intersection())
                 && vehicle.offset() > boxLength) {
             zone.leave(vehicle.id());
             held.remove(vehicle.id());
+            if (zone.intersection().equals(preempted.get(vehicle.id()))) {
+                releasePreemption(vehicle.id());
+            }
         }
     }
 
     private void releaseAll(Vehicle vehicle) {
         zones.releaseAll(vehicle.id());
         held.remove(vehicle.id());
+        releasePreemption(vehicle.id());
+    }
+
+    private void releasePreemption(String vehicleId) {
+        Intersection at = preempted.remove(vehicleId);
+        if (at != null) {
+            lights.release(at, vehicleId);
+        }
     }
 
     private Map<Road, List<Vehicle>> vehiclesByRoad() {

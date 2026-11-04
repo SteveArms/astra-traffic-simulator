@@ -37,6 +37,8 @@ class SimConfigTest {
         assertSpecs(config);
         assertEquals(2.0, config.congestionFactor());
         assertEquals(0.6, config.randomJitter());
+        assertEquals(80, config.emergencyPreemptDistance());
+        assertEquals(Duration.ofSeconds(30), config.emergencyMaxSeconds());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -66,6 +68,8 @@ class SimConfigTest {
         assertSpecs(config);
         assertEquals(2.0, config.congestionFactor());
         assertEquals(0.6, config.randomJitter());
+        assertEquals(80, config.emergencyPreemptDistance());
+        assertEquals(Duration.ofSeconds(30), config.emergencyMaxSeconds());
         assertEquals(4, config.demoCarCount());
         assertEquals(42, config.demoSeed());
         assertEquals("maps/city-3x3.json", config.mapFile());
@@ -136,7 +140,8 @@ class SimConfigTest {
         SimConfig.APPROACH_MARGIN, SimConfig.ROUTING_CONGESTION_FACTOR, SimConfig.ROUTING_RANDOM_JITTER,
         SimConfig.CAR_LENGTH, SimConfig.BUS_MAX_SPEED, SimConfig.BUS_ACCELERATION, SimConfig.BUS_DECELERATION,
         SimConfig.BUS_LENGTH, SimConfig.AMBULANCE_MAX_SPEED, SimConfig.AMBULANCE_ACCELERATION,
-        SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH
+        SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH, SimConfig.EMERGENCY_PREEMPT_DISTANCE,
+        SimConfig.EMERGENCY_MAX_SECONDS
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();
