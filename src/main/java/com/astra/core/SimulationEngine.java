@@ -1,14 +1,17 @@
 package com.astra.core;
 
+import com.astra.command.CommandBus;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Bucle de paso fijo en el hilo {@code astra-engine}: genera vehículos, actualiza el mundo y publica un
- * {@link WorldSnapshot} por tick.
+ * Bucle de paso fijo en el hilo {@code astra-engine}: ejecuta los comandos pendientes, genera vehículos, actualiza
+ * el mundo y publica un {@link WorldSnapshot} por tick. Tanto el bucle como {@link #step()} corren en ese hilo.
  */
 public final class SimulationEngine {
 
@@ -18,12 +21,16 @@ public final class SimulationEngine {
     private static final double MILLIS_PER_SECOND = 1_000.0;
 
     private final WorldState world;
+    private final CommandBus commandBus;
     private final long tickMillis;
     private final double dtSeconds;
     private final AtomicReference<WorldSnapshot> latest = new AtomicReference<>(WorldSnapshot.EMPTY);
 
-    // volatile para que isRunning() no necesite el lock que stop() retiene.
+    // Guardados por el monitor de this; volatile para que isRunning() no necesite el lock que stop() retiene.
     private volatile ScheduledExecutorService executor;
+    private volatile ScheduledFuture<?> loop;
+    private volatile Thread engineThread;
+    // Solo los toca astra-engine.
     private long tick;
     private double simTimeSeconds;
 
@@ -33,7 +40,12 @@ public final class SimulationEngine {
 
     /** Conecta el spawner al mundo: corre en la fase COMMIT de cada tick. */
     public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner) {
+        this(config, world, spawner, new CommandBus());
+    }
+
+    public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner, CommandBus commandBus) {
         this.world = Objects.requireNonNull(world, "world");
+        this.commandBus = Objects.requireNonNull(commandBus, "commandBus");
         if (spawner != null) {
             world.setSpawner(spawner);
         }
@@ -46,16 +58,12 @@ public final class SimulationEngine {
         if (isRunning()) {
             throw new IllegalStateException("Engine is already running");
         }
-        executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
-            var thread = new Thread(runnable, THREAD_NAME);
-            thread.setDaemon(true);
-            return thread;
-        });
-        executor.scheduleAtFixedRate(this::tickSafely, 0, tickMillis, TimeUnit.MILLISECONDS);
+        loop = engineExecutor().scheduleAtFixedRate(this::tickSafely, 0, tickMillis, TimeUnit.MILLISECONDS);
     }
 
     /** Detiene astra-engine y después los astra-worker-N. @implNote Called from the FX Application Thread. */
     public synchronized void stop() {
+        loop = null;
         if (executor != null) {
             executor.shutdownNow();
             try {
@@ -68,23 +76,66 @@ public final class SimulationEngine {
         world.shutdown();
     }
 
-    /** @implNote Called from tests or StepCmd while the engine is stopped. */
+    /**
+     * Avanza un tick en el hilo astra-engine y espera a que termine.
+     *
+     * @implNote Called from tests or StepCmd while the engine is stopped.
+     */
     public synchronized void step() {
         if (isRunning()) {
             throw new IllegalStateException("Cannot step while the engine is running");
         }
-        tick();
+        if (Thread.currentThread() == engineThread) {
+            tick();
+            return;
+        }
+        try {
+            engineExecutor().submit(this::tick).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while stepping", e);
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (e.getCause() instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(e.getCause());
+        }
     }
 
     /** @implNote Safe to call from any thread. */
     public boolean isRunning() {
-        ScheduledExecutorService current = executor;
-        return current != null && !current.isShutdown();
+        ScheduledFuture<?> current = loop;
+        return current != null && !current.isDone();
     }
 
     /** @implNote Safe to call from any thread. */
     public WorldSnapshot latestSnapshot() {
         return latest.get();
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public CommandBus commandBus() {
+        return commandBus;
+    }
+
+    /** Ticks completados. @implNote Called from the astra-engine thread (p. ej. desde un Command). */
+    public long currentTick() {
+        return tick;
+    }
+
+    private ScheduledExecutorService engineExecutor() {
+        if (executor == null || executor.isShutdown()) {
+            executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+                var thread = new Thread(runnable, THREAD_NAME);
+                thread.setDaemon(true);
+                engineThread = thread;
+                return thread;
+            });
+        }
+        return executor;
     }
 
     private void tickSafely() {
@@ -102,6 +153,7 @@ public final class SimulationEngine {
     }
 
     private void tick() {
+        commandBus.drainTo(this);
         world.update(dtSeconds);
         tick++;
         simTimeSeconds += dtSeconds;
