@@ -11,7 +11,10 @@ Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
   sincronizadas por un `Phaser` (ver [Ciclo de un tick](#ciclo-de-un-tick)).
 - Autos, buses y ambulancias entran y salen por el borde del mapa, cada uno con su estrategia de
   ruta; las ambulancias ponen en verde el semáforo al que se acercan.
-- La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo.
+- La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo; cada acción del usuario (pausa,
+  paso, velocidad, generar vehículos, forzar un semáforo) es un `Command` que el motor ejecuta al
+  inicio del tick.
+- Los semáforos tienen un modo inteligente que alarga el verde del eje con más vehículos esperando.
 - Los vehículos cruzan las intersecciones con Reloj de Lamport y Ricart‑Agrawala. *(En desarrollo)*
 
 ## Requisitos
@@ -66,23 +69,26 @@ carpeta queda en `target\`, así que Git la ignora.
 src/main/java/com/astra/
 ├── app/          AstraApp: punto de entrada JavaFX
 ├── core/         SimConfig, SimulationEngine, ParallelUpdater, WorldState, WorldSnapshot,
-│                 VehicleSpawner, LightView, IntersectionZone(s)
+│                 VehicleSpawner, LightView, IntersectionZone(s), PauseGate, SimulationControl,
+│                 SimStats, StatsView
 ├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph, Heuristics
 │   └── algo/     Dijkstra, AStar
 ├── model/        Vehicle, Car, Bus, Ambulance, VehicleSpec(s), VehicleFactory, VehicleKind,
 │                 VehicleView; carriles (En desarrollo)
-├── traffic/      LightState, Green/Yellow/Red/EmergencyState, TrafficLight, LightController;
-│                 SmartAdaptiveState (En desarrollo)
+├── traffic/      LightState, Green/Yellow/Red/Emergency/SmartAdaptiveState, TrafficLight,
+│                 LightController, LightMode, QueueSensor
 ├── routing/      RouteStrategy, ShortestDistance/LeastCongested/RandomRouteStrategy,
 │                 RouteStrategies, RoadOccupancy
-├── command/      Comandos y CommandBus (En desarrollo)
+├── command/      Command, CommandBus, Commands y los comandos (Pause, Resume, TogglePause, Step,
+│                 SetSpeed, SpawnVehicle, ForceLight, SetLightMode)
 ├── events/       Eventos y su cola de prioridad (En desarrollo)
 ├── distributed/  Lamport y Ricart‑Agrawala (En desarrollo)
-├── view/         CityRenderer; ControlPanel y StatsPanel (En desarrollo)
+├── view/         CityRenderer, ControlPanel, StatsPanel
 └── util/         MapLoader, MapFormatException; SimLogger (En desarrollo)
 
 src/main/resources/com/astra/
 ├── config.properties     parámetros de la simulación
+├── css/astra.css         tema oscuro de la interfaz
 └── maps/city-3x3.json    mapa por defecto
 ```
 
@@ -93,17 +99,34 @@ JavaFX, así que el motor se puede probar sin interfaz gráfica.
 
 | Elemento | Dónde | Para qué | Estado |
 | --- | --- | --- | --- |
-| State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`) | Cada fase del semáforo es una clase que decide el color de cada eje (NS/EW), su duración y la fase siguiente | Implementado (`SmartAdaptiveState` en desarrollo) |
+| State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`) | Cada fase del semáforo es una clase que decide el color de cada eje (NS/EW), su duración y la fase siguiente | Implementado |
+| Semáforo inteligente | `traffic.SmartAdaptiveState`, `LightMode` | En modo SMART, el verde se alarga de a `smart.extensionStepSeconds` mientras su eje tenga al menos `smart.queueThreshold` vehículos acercándose y el contrario menos, hasta `smart.maxExtensionSeconds` | Implementado |
 | Preferencia de paso | `traffic.EmergencyState`, `TrafficLight.preempt/release` | Una ambulancia a menos de `emergency.preemptDistance` pone en verde su eje; al salir del cruce sigue el ciclo normal. Sigue necesitando reservar la zona | Implementado |
 | `Semaphore` | `core.IntersectionZone` | Limita cuántos vehículos ocupan a la vez la zona de cruce; solo `tryAcquire`, nunca bloquea el tick | Implementado |
 | Strategy | `routing` (`RouteStrategy`) | Cambiar cómo calcula su ruta un vehículo: más corta (Dijkstra), menos congestionada (A* con la ocupación de las vías, recalculada en cada intersección) o aleatoria | Implementado |
 | Tipos de vehículo | `model` (`Car`, `Bus`, `Ambulance`, `VehicleFactory`) | Cada tipo tiene su velocidad, aceleración, frenado y largo (`VehicleSpec`); `VehicleSpawner` los genera por pesos | Implementado |
 | `Phaser` | `core.ParallelUpdater` | Separa las fases PLAN y MOVE de los `astra-worker-N` dentro de cada tick | Implementado |
-| Command | `command` (`Command`, `CommandBus`) | La UI envía acciones (pausa, velocidad, aparición de vehículos) y el motor las ejecuta al inicio de cada tick | En desarrollo |
+| Command | `command` (`Command`, `CommandBus`, `Commands`) | La UI envía acciones a una `LinkedBlockingQueue` y el motor las ejecuta en orden al inicio de cada tick; un comando que falla no detiene a los demás | Implementado |
+| Pausa, paso y velocidad | `core` (`PauseGate`, `SimulationControl`) | `PauseGate` (`ReentrantLock` + `Condition`) congela el mundo y los semáforos sin bloquear el motor, que sigue drenando comandos; la velocidad va de ×0.25 a ×4 | Implementado |
+| Estadísticas | `core` (`SimStats`, `StatsView`) | Espera y viaje promedio (total y por tipo), throughput de los últimos 60 s, colas y una serie de 300 puntos para las gráficas | Implementado |
 | `Graph<V, E extends Edge<V>>` | `graph` | Grafo dirigido genérico y seguro para lecturas concurrentes | Implementado |
 | `PriorityQueue` | `graph.algo.Dijkstra` | Cola ordenada por distancia en el cálculo de caminos mínimos | Implementado |
 | `PriorityQueue` | `graph.algo.AStar` | Cola ordenada por `f = g + h` con heurístico euclidiano admisible | Implementado |
 | `PriorityQueue` | `events`, `distributed` | Cola de eventos y solicitudes de Ricart‑Agrawala ordenadas por `(timestamp, processId)` | En desarrollo |
+
+## Controles
+
+| Control | Acción |
+| --- | --- |
+| `Espacio` | Pausar o reanudar |
+| `S` | Avanzar un tick (solo en pausa) |
+| `+` / `−` | Duplicar o dividir la velocidad (entre ×0.25 y ×4) |
+| Clic en una intersección | Seleccionarla (también en el panel de semáforos) |
+| Clic derecho en una intersección | Forzar verde NS o EW |
+
+Si un botón o una lista tiene el foco, `Espacio` hace su acción propia (por ejemplo, pulsa el
+botón); los demás atajos funcionan siempre. Junto a cada semáforo, `↕` y `↔` muestran cuántos
+vehículos se acercan por el eje NS y EW.
 
 ## Ciclo de un tick
 

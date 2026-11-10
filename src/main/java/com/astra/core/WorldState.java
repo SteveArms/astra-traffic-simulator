@@ -227,7 +227,7 @@ public final class WorldState implements QueueSensor {
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
         return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
-                speedFactor, stats.toView());
+                speedFactor, stats.toView(), lights.mode());
     }
 
     /** @implNote Called from astra-engine. */

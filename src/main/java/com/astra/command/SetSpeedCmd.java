@@ -21,6 +21,6 @@ public record SetSpeedCmd(double factor) implements Command {
 
     @Override
     public String describe() {
-        return "SetSpeed(" + factor + "x)";
+        return "SetSpeed(×%.2f)".formatted(factor);
     }
 }

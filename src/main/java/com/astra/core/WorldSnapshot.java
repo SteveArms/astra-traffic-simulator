@@ -2,6 +2,7 @@ package com.astra.core;
 
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.traffic.LightMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,16 +18,18 @@ import java.util.Objects;
  */
 public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights,
         long spawned, long despawned, Map<VehicleKind, Integer> activeByKind, boolean paused, double speedFactor,
-        StatsView stats) {
+        StatsView stats, LightMode lightMode) {
 
     public static final WorldSnapshot EMPTY =
-            new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of(), false, 1.0, StatsView.EMPTY);
+            new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of(), false, 1.0, StatsView.EMPTY,
+                    LightMode.FIXED);
 
     public WorldSnapshot {
         vehicles = List.copyOf(vehicles);
         lights = List.copyOf(lights);
         activeByKind = Map.copyOf(activeByKind);
         Objects.requireNonNull(stats, "stats");
+        Objects.requireNonNull(lightMode, "lightMode");
     }
 
     public int vehicleCount() {
