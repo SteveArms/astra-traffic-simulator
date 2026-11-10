@@ -43,6 +43,9 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String SMART_MAX_EXTENSION_SECONDS = "smart.maxExtensionSeconds";
     static final String SMART_EXTENSION_STEP_SECONDS = "smart.extensionStepSeconds";
     static final String SMART_QUEUE_RADIUS = "smart.queueRadius";
+    static final String STATS_THROUGHPUT_WINDOW_SECONDS = "stats.throughputWindowSeconds";
+    static final String STATS_SAMPLE_SECONDS = "stats.sampleSeconds";
+    static final String STATS_SERIES_CAPACITY = "stats.seriesCapacity";
     static final String SPAWN_INTERVAL_MILLIS = "spawn.intervalMillis";
     static final String VEHICLE_MAX_COUNT = "vehicle.maxCount";
     static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
@@ -87,6 +90,9 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final long DEFAULT_SMART_MAX_EXTENSION_SECONDS = 6;
     private static final long DEFAULT_SMART_EXTENSION_STEP_SECONDS = 2;
     private static final double DEFAULT_SMART_QUEUE_RADIUS = 120;
+    private static final long DEFAULT_STATS_THROUGHPUT_WINDOW_SECONDS = 60;
+    private static final long DEFAULT_STATS_SAMPLE_SECONDS = 1;
+    private static final int DEFAULT_STATS_SERIES_CAPACITY = 300;
     private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 300;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
@@ -130,6 +136,9 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final Duration smartMaxExtensionSeconds;
     private final Duration smartExtensionStepSeconds;
     private final double smartQueueRadius;
+    private final Duration statsThroughputWindow;
+    private final Duration statsSampleInterval;
+    private final int statsSeriesCapacity;
     private final Duration spawnIntervalMillis;
     private final int vehicleMaxCount;
     private final double carMaxSpeed;
@@ -168,6 +177,10 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         smartExtensionStepSeconds = Duration.ofSeconds(
                 positiveLong(p, SMART_EXTENSION_STEP_SECONDS, DEFAULT_SMART_EXTENSION_STEP_SECONDS));
         smartQueueRadius = positiveDouble(p, SMART_QUEUE_RADIUS, DEFAULT_SMART_QUEUE_RADIUS);
+        statsThroughputWindow = Duration.ofSeconds(
+                positiveLong(p, STATS_THROUGHPUT_WINDOW_SECONDS, DEFAULT_STATS_THROUGHPUT_WINDOW_SECONDS));
+        statsSampleInterval = Duration.ofSeconds(positiveLong(p, STATS_SAMPLE_SECONDS, DEFAULT_STATS_SAMPLE_SECONDS));
+        statsSeriesCapacity = positiveInt(p, STATS_SERIES_CAPACITY, DEFAULT_STATS_SERIES_CAPACITY);
         spawnIntervalMillis = Duration.ofMillis(
                 positiveLong(p, SPAWN_INTERVAL_MILLIS, DEFAULT_SPAWN_INTERVAL_MILLIS));
         vehicleMaxCount = positiveInt(p, VEHICLE_MAX_COUNT, DEFAULT_VEHICLE_MAX_COUNT);
@@ -282,6 +295,18 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     /** Distancia al centro de la intersección (px) dentro de la cual un vehículo detenido cuenta como cola. */
     public double smartQueueRadius() {
         return smartQueueRadius;
+    }
+
+    public Duration statsThroughputWindow() {
+        return statsThroughputWindow;
+    }
+
+    public Duration statsSampleInterval() {
+        return statsSampleInterval;
+    }
+
+    public int statsSeriesCapacity() {
+        return statsSeriesCapacity;
     }
 
     public Duration spawnIntervalMillis() {

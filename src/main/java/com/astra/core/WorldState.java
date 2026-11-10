@@ -78,6 +78,7 @@ public final class WorldState implements QueueSensor {
     private VehicleSpawner spawner;
     private final AtomicReference<RoadOccupancy> occupancy = new AtomicReference<>(RoadOccupancy.EMPTY);
     private final AtomicReference<Map<Intersection, Map<Axis, Integer>>> queues = new AtomicReference<>(Map.of());
+    private final SimStats stats;
     private long spawned;
     private long despawned;
 
@@ -91,6 +92,7 @@ public final class WorldState implements QueueSensor {
         this.approachMargin = cfg.approachMargin();
         this.preemptDistance = cfg.emergencyPreemptDistance();
         this.queueRadius = cfg.smartQueueRadius();
+        this.stats = new SimStats(cfg);
         this.carFootprint = cfg.minGap() + cfg.specFor(VehicleKind.CAR).length();
         this.updater = cfg.engineParallel()
                 ? new ParallelUpdater(cfg.engineWorkers(), cfg.tickMillis().multipliedBy(PHASE_TIMEOUT_TICKS))
@@ -225,7 +227,7 @@ public final class WorldState implements QueueSensor {
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
         return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
-                speedFactor);
+                speedFactor, stats.toView());
     }
 
     /** @implNote Called from astra-engine. */
@@ -272,12 +274,14 @@ public final class WorldState implements QueueSensor {
 
     // Fase C. @implNote Called from astra-engine.
     private void commit(Road[] before, double dtSeconds) {
+        stats.advance(dtSeconds);
         for (int i = 0; i < before.length; i++) {
             Vehicle vehicle = vehicles.get(i);
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
                 releaseAll(vehicle);
                 despawned++;
+                stats.recordArrival(vehicle.kind(), vehicle.tripSeconds(), vehicle.waitSeconds());
             } else if (!vehicle.currentRoad().equals(before[i]) && vehicle.strategy().isAdaptive()) {
                 vehicle.reroute(graph, vehicle.currentRoad().to());
             }
@@ -288,7 +292,13 @@ public final class WorldState implements QueueSensor {
         }
         rebuildIndex();
         occupancy.set(measureOccupancy());
-        queues.set(measureQueues());
+        Map<Intersection, Map<Axis, Integer>> measured = measureQueues();
+        queues.set(measured);
+        int totalQueue = measured.values().stream()
+                .flatMap(byAxis -> byAxis.values().stream())
+                .mapToInt(Integer::intValue)
+                .sum();
+        stats.sample(vehicles.size(), totalQueue);
     }
 
     /** @implNote Called from astra-lights-N: lee el último mapa inmutable publicado en la fase C. */

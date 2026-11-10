@@ -209,6 +209,9 @@ smart.queueThreshold=5
 smart.maxExtensionSeconds=6
 smart.extensionStepSeconds=2
 smart.queueRadius=120
+stats.throughputWindowSeconds=60
+stats.sampleSeconds=1
+stats.seriesCapacity=300
 spawn.intervalMillis=300
 spawn.seed=42
 spawn.weight.car=0.75
@@ -274,6 +277,9 @@ log.file=logs/astra.log
   acercan (parados o no) a `smart.queueRadius` px o menos del centro de la intersección. Si la cola del eje en
   verde es `>= smart.queueThreshold` y la del contrario es menor, el verde se alarga `smart.extensionStepSeconds`
   cada vez, hasta sumar como máximo `smart.maxExtensionSeconds`.
+- `stats.*` (`SimStats`): el throughput cuenta las llegadas de los últimos `stats.throughputWindowSeconds`; cada
+  `stats.sampleSeconds` de tiempo simulado se agrega un punto a una serie de `stats.seriesCapacity` puntos. La
+  espera de un vehículo es el tiempo que pasa por debajo de `Vehicle.WAITING_SPEED` (0.5 px/s).
 - `emergency.maxSeconds`: límite de seguridad de `EmergencyState`; si nadie lo libera antes, el semáforo
   sigue solo con el amarillo de ese eje.
 - `spawn.*`: `VehicleSpawner` corre dentro del tick (hilo `astra-engine`) y cada `spawn.intervalMillis` de
