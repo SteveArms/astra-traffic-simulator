@@ -3,9 +3,9 @@ package com.astra.core;
 import com.astra.traffic.LightColor;
 import java.util.Objects;
 
-/** Semáforo y ocupación de su zona en un instante; parte de {@link WorldSnapshot}. */
+/** Semáforo, ocupación de su zona y demanda por eje en un instante; parte de {@link WorldSnapshot}. */
 public record LightView(String intersectionId, double x, double y, LightColor ns, LightColor ew,
-        String stateName, int zoneOccupancy, int zoneCapacity) {
+        String stateName, int zoneOccupancy, int zoneCapacity, int queueNs, int queueEw) {
 
     public LightView {
         Objects.requireNonNull(intersectionId, "intersectionId");

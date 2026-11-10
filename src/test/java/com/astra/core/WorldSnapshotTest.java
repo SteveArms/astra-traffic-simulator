@@ -19,7 +19,7 @@ class WorldSnapshotTest {
     private static final VehicleView CAR = new VehicleView("CAR-1", VehicleKind.CAR, 10, 20, 0, 5, 12, "SHORTEST");
     private static final VehicleView BUS = new VehicleView("BUS-1", VehicleKind.BUS, 30, 40, Math.PI, 3, 20, "RANDOM");
     private static final LightView LIGHT =
-            new LightView("I11", 350, 300, LightColor.GREEN, LightColor.RED, "GREEN(NS)", 1, 2);
+            new LightView("I11", 350, 300, LightColor.GREEN, LightColor.RED, "GREEN(NS)", 1, 2, 0, 0);
 
     @Test
     void vehiclesListIsUnmodifiable() {
@@ -96,6 +96,6 @@ class WorldSnapshotTest {
     void lightViewReportsZoneState() {
         assertTrue(LIGHT.zoneOccupied());
         assertFalse(LIGHT.zoneFull());
-        assertTrue(new LightView("I00", 0, 0, LightColor.RED, LightColor.RED, "RED(next NS)", 2, 2).zoneFull());
+        assertTrue(new LightView("I00", 0, 0, LightColor.RED, LightColor.RED, "RED(next NS)", 2, 2, 0, 0).zoneFull());
     }
 }

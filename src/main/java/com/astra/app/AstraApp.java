@@ -31,7 +31,7 @@ public final class AstraApp extends Application {
         SimConfig config = SimConfig.load();
         MapLoader.LoadedMap map = MapLoader.load(config.mapFile());
         var control = new SimulationControl();
-        lights = new LightController(map.graph(), config, control::speedFactor);
+        lights = new LightController(map.graph(), config, config, control::speedFactor);
         control.pauseGate().addListener(PauseListener.of(lights::pause, lights::resume));
         var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config));
         engine = new SimulationEngine(config, world, new VehicleSpawner(world, config), new CommandBus(), control);

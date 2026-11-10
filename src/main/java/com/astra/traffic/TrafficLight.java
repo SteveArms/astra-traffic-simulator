@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 
 /**
  * Semáforo de una intersección; su estado se lee desde cualquier hilo sin bloquear.
@@ -26,6 +27,8 @@ import java.util.function.DoubleSupplier;
  * guardan la duración de la nueva fase. La velocidad divide cada duración al programarla: un cambio de velocidad
  * se aplica desde la siguiente transición, no a la que ya está en curso.
  *
+ * <p>En modo SMART cada verde nuevo pasa a ser un {@link SmartAdaptiveState} (ver {@link #adapt}).
+ *
  * @implNote {@link #transition} corre en astra-lights-N; {@link #preempt} y {@link #release} en astra-engine o
  *           astra-worker-N; {@link #pause} y {@link #resume} en el hilo que pausa (normalmente astra-engine).
  */
@@ -34,6 +37,9 @@ public final class TrafficLight {
     private final Intersection intersection;
     private final LightTimings timings;
     private final DoubleSupplier speedFactor;
+    private final Supplier<LightMode> mode;
+    private final QueueSensor sensor;
+    private final SmartTimings smartTimings;
     private final AtomicReference<LightState> state;
     private final AtomicLong transitions = new AtomicLong();
     private final AtomicReference<ScheduledFuture<?>> pending = new AtomicReference<>();
@@ -47,16 +53,19 @@ public final class TrafficLight {
     private long remainingMillis = -1;
 
     public TrafficLight(Intersection intersection, LightTimings timings, LightState initial) {
-        this(intersection, timings, initial, () -> 1.0);
+        this(intersection, timings, initial, () -> 1.0, () -> LightMode.FIXED, QueueSensor.NONE,
+                SmartTimings.NEVER_EXTEND);
     }
 
-    /** @param speedFactor multiplicador de velocidad (> 0); se lee al programar cada transición */
     public TrafficLight(Intersection intersection, LightTimings timings, LightState initial,
-            DoubleSupplier speedFactor) {
+            DoubleSupplier speedFactor, Supplier<LightMode> mode, QueueSensor sensor, SmartTimings smartTimings) {
         this.intersection = Objects.requireNonNull(intersection, "intersection");
         this.timings = Objects.requireNonNull(timings, "timings");
         this.state = new AtomicReference<>(Objects.requireNonNull(initial, "initial"));
         this.speedFactor = Objects.requireNonNull(speedFactor, "speedFactor");
+        this.mode = Objects.requireNonNull(mode, "mode");
+        this.sensor = Objects.requireNonNull(sensor, "sensor");
+        this.smartTimings = Objects.requireNonNull(smartTimings, "smartTimings");
     }
 
     public LightState state() {
@@ -143,6 +152,7 @@ public final class TrafficLight {
         try {
             executor = ex;
             cancelPendingLocked();
+            state.set(adapt(state.get()));
             scheduleLocked();
         } finally {
             lock.unlock();
@@ -184,7 +194,7 @@ public final class TrafficLight {
         lock.lock();
         try {
             cancelPendingLocked();
-            var green = new GreenState(axis);
+            LightState green = adapt(new GreenState(axis));
             if (!state.get().equals(green)) {
                 state.set(green);
                 transitions.incrementAndGet();
@@ -228,7 +238,7 @@ public final class TrafficLight {
             pending.set(null);
             try {
                 LightState current = state.get();
-                state.set(current.next());
+                state.set(adapt(current.next()));
                 transitions.incrementAndGet();
                 if (current instanceof EmergencyState) {
                     // Venció el límite de seguridad: las peticiones pendientes ya no cuentan.
@@ -242,6 +252,13 @@ public final class TrafficLight {
         } finally {
             lock.unlock();
         }
+    }
+
+    private LightState adapt(LightState next) {
+        if (mode.get() == LightMode.SMART && next instanceof GreenState green) {
+            return new SmartAdaptiveState(green.active(), intersection, sensor, smartTimings, 0);
+        }
+        return next;
     }
 
     private void cancelPendingLocked() {

@@ -29,19 +29,25 @@ public final class LightController {
     private final Map<Intersection, TrafficLight> lights;
     private volatile ScheduledExecutorService executor;
     private volatile LightMode mode = LightMode.FIXED;
+    private volatile QueueSensor queueSensor = QueueSensor.NONE;
 
     public LightController(RoadGraph graph, LightTimings timings) {
         this(graph, timings, () -> 1.0);
     }
 
-    /**
-     * @param speedFactor multiplicador de velocidad de la simulación; cada fase dura {@code duración / speedFactor}
-     *                    y el valor se lee al programar cada transición
-     */
     public LightController(RoadGraph graph, LightTimings timings, DoubleSupplier speedFactor) {
+        this(graph, timings, SmartTimings.NEVER_EXTEND, speedFactor);
+    }
+
+    /** Cada fase dura {@code duración / speedFactor}; sin {@code smartTimings} SMART nunca extiende. */
+    public LightController(RoadGraph graph, LightTimings timings, SmartTimings smartTimings,
+            DoubleSupplier speedFactor) {
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(timings, "timings");
+        Objects.requireNonNull(smartTimings, "smartTimings");
         Objects.requireNonNull(speedFactor, "speedFactor");
+        // El sensor real (el mundo) se conecta después con setQueueSensor.
+        QueueSensor sensor = (at, axis) -> queueSensor.queueLength(at, axis);
         Map<Intersection, Set<Axis>> incomingAxes = new HashMap<>();
         Map<Intersection, Integer> incomingCount = new HashMap<>();
         for (Road road : graph.edges()) {
@@ -59,7 +65,8 @@ public final class LightController {
                 // Damero: vecinas con ejes opuestos.
                 int parity = columns.indexOf(intersection.x()) + rows.indexOf(intersection.y());
                 Axis first = parity % 2 == 0 ? Axis.NS : Axis.EW;
-                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first), speedFactor));
+                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first), speedFactor,
+                        this::mode, sensor, smartTimings));
             }
         }
         lights = Map.copyOf(created);
@@ -116,7 +123,12 @@ public final class LightController {
         lights.values().forEach(TrafficLight::resume);
     }
 
-    /** @implNote Safe to call from any thread (usually astra-engine, from SetLightModeCmd). */
+    /** @implNote Called before the lights start, from the WorldState constructor. */
+    public void setQueueSensor(QueueSensor sensor) {
+        this.queueSensor = Objects.requireNonNull(sensor, "sensor");
+    }
+
+    /** Aplica desde el próximo verde. @implNote Safe to call from any thread (usually astra-engine). */
     public void setMode(LightMode mode) {
         this.mode = Objects.requireNonNull(mode, "mode");
     }

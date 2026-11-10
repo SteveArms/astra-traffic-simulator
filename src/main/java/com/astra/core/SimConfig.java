@@ -8,6 +8,7 @@ import com.astra.routing.RandomRouteStrategy;
 import com.astra.routing.RoutingSettings;
 import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightTimings;
+import com.astra.traffic.SmartTimings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -28,7 +29,7 @@ import java.util.Properties;
  * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
  * Thread-safe por ser inmutable.
  */
-public final class SimConfig implements LightTimings, RoutingSettings, VehicleSpecs {
+public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
@@ -40,6 +41,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     static final String ALL_RED_SECONDS = "lights.allRedSeconds";
     static final String SMART_QUEUE_THRESHOLD = "smart.queueThreshold";
     static final String SMART_MAX_EXTENSION_SECONDS = "smart.maxExtensionSeconds";
+    static final String SMART_EXTENSION_STEP_SECONDS = "smart.extensionStepSeconds";
+    static final String SMART_QUEUE_RADIUS = "smart.queueRadius";
     static final String SPAWN_INTERVAL_MILLIS = "spawn.intervalMillis";
     static final String VEHICLE_MAX_COUNT = "vehicle.maxCount";
     static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
@@ -82,6 +85,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private static final long DEFAULT_ALL_RED_SECONDS = 1;
     private static final int DEFAULT_SMART_QUEUE_THRESHOLD = 5;
     private static final long DEFAULT_SMART_MAX_EXTENSION_SECONDS = 6;
+    private static final long DEFAULT_SMART_EXTENSION_STEP_SECONDS = 2;
+    private static final double DEFAULT_SMART_QUEUE_RADIUS = 120;
     private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 300;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
@@ -123,6 +128,8 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
     private final Duration allRedSeconds;
     private final int smartQueueThreshold;
     private final Duration smartMaxExtensionSeconds;
+    private final Duration smartExtensionStepSeconds;
+    private final double smartQueueRadius;
     private final Duration spawnIntervalMillis;
     private final int vehicleMaxCount;
     private final double carMaxSpeed;
@@ -158,6 +165,9 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
         smartQueueThreshold = positiveInt(p, SMART_QUEUE_THRESHOLD, DEFAULT_SMART_QUEUE_THRESHOLD);
         smartMaxExtensionSeconds = Duration.ofSeconds(
                 positiveLong(p, SMART_MAX_EXTENSION_SECONDS, DEFAULT_SMART_MAX_EXTENSION_SECONDS));
+        smartExtensionStepSeconds = Duration.ofSeconds(
+                positiveLong(p, SMART_EXTENSION_STEP_SECONDS, DEFAULT_SMART_EXTENSION_STEP_SECONDS));
+        smartQueueRadius = positiveDouble(p, SMART_QUEUE_RADIUS, DEFAULT_SMART_QUEUE_RADIUS);
         spawnIntervalMillis = Duration.ofMillis(
                 positiveLong(p, SPAWN_INTERVAL_MILLIS, DEFAULT_SPAWN_INTERVAL_MILLIS));
         vehicleMaxCount = positiveInt(p, VEHICLE_MAX_COUNT, DEFAULT_VEHICLE_MAX_COUNT);
@@ -262,6 +272,16 @@ public final class SimConfig implements LightTimings, RoutingSettings, VehicleSp
 
     public Duration smartMaxExtensionSeconds() {
         return smartMaxExtensionSeconds;
+    }
+
+    @Override
+    public Duration smartExtensionStepSeconds() {
+        return smartExtensionStepSeconds;
+    }
+
+    /** Distancia al centro de la intersección (px) dentro de la cual un vehículo detenido cuenta como cola. */
+    public double smartQueueRadius() {
+        return smartQueueRadius;
     }
 
     public Duration spawnIntervalMillis() {

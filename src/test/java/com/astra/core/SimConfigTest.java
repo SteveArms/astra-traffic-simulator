@@ -28,6 +28,8 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
+        assertEquals(Duration.ofSeconds(2), config.smartExtensionStepSeconds());
+        assertEquals(120, config.smartQueueRadius());
         assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
@@ -63,6 +65,8 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
+        assertEquals(Duration.ofSeconds(2), config.smartExtensionStepSeconds());
+        assertEquals(120, config.smartQueueRadius());
         assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
@@ -151,7 +155,8 @@ class SimConfigTest {
         SimConfig.CAR_LENGTH, SimConfig.BUS_MAX_SPEED, SimConfig.BUS_ACCELERATION, SimConfig.BUS_DECELERATION,
         SimConfig.BUS_LENGTH, SimConfig.AMBULANCE_MAX_SPEED, SimConfig.AMBULANCE_ACCELERATION,
         SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH, SimConfig.EMERGENCY_PREEMPT_DISTANCE,
-        SimConfig.EMERGENCY_MAX_SECONDS, SimConfig.SPAWN_SEED
+        SimConfig.EMERGENCY_MAX_SECONDS, SimConfig.SPAWN_SEED, SimConfig.SMART_EXTENSION_STEP_SECONDS,
+        SimConfig.SMART_QUEUE_RADIUS
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();
