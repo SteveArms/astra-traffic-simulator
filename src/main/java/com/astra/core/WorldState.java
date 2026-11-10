@@ -11,6 +11,7 @@ import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
 import com.astra.traffic.LightController;
 import com.astra.traffic.LightState;
+import com.astra.traffic.QueueSensor;
 import com.astra.traffic.TrafficLight;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,15 +41,15 @@ import java.util.function.IntConsumer;
  *   <li><b>B · MOVE</b> (mismos hilos y bloques que A): cada vehículo aplica {@code update(dt, plan[i])} y solo
  *       modifica su propio estado.</li>
  *   <li><b>C · COMMIT</b> (siempre astra-engine, secuencial): libera zonas y semáforos, recalcula rutas
- *       adaptativas, elimina a los que llegaron, ejecuta el spawner y reconstruye el índice por vía y la
- *       {@link RoadOccupancy}.</li>
+ *       adaptativas, elimina a los que llegaron, ejecuta el spawner y reconstruye el índice por vía, la
+ *       {@link RoadOccupancy} y las colas por intersección y eje.</li>
  * </ol>
  * El {@link java.util.concurrent.Phaser} de {@link ParallelUpdater} separa A de B y da la relación
  * <i>happens-before</i> entre las escrituras de los workers y la fase C.
  *
- * @implNote Su único dueño es astra-engine; los demás hilos usan {@link WorldSnapshot}.
+ * @implNote Su único dueño es astra-engine; los demás hilos usan {@link WorldSnapshot} o {@link #queueLength}.
  */
-public final class WorldState {
+public final class WorldState implements QueueSensor {
 
     private static final int PHASE_TIMEOUT_TICKS = 2;
 
@@ -60,6 +61,7 @@ public final class WorldState {
     private final double boxLength;
     private final double approachMargin;
     private final double preemptDistance;
+    private final double queueRadius;
     // Largo de vía que ocupa un auto con su hueco: base de la capacidad aproximada de cada vía.
     private final double carFootprint;
     private final List<Vehicle> vehicles = new ArrayList<>();
@@ -75,6 +77,8 @@ public final class WorldState {
     private boolean indexDirty = true;
     private VehicleSpawner spawner;
     private final AtomicReference<RoadOccupancy> occupancy = new AtomicReference<>(RoadOccupancy.EMPTY);
+    private final AtomicReference<Map<Intersection, Map<Axis, Integer>>> queues = new AtomicReference<>(Map.of());
+    private final SimStats stats;
     private long spawned;
     private long despawned;
 
@@ -87,10 +91,13 @@ public final class WorldState {
         this.boxLength = cfg.boxLength();
         this.approachMargin = cfg.approachMargin();
         this.preemptDistance = cfg.emergencyPreemptDistance();
+        this.queueRadius = cfg.smartQueueRadius();
+        this.stats = new SimStats(cfg);
         this.carFootprint = cfg.minGap() + cfg.specFor(VehicleKind.CAR).length();
         this.updater = cfg.engineParallel()
                 ? new ParallelUpdater(cfg.engineWorkers(), cfg.tickMillis().multipliedBy(PHASE_TIMEOUT_TICKS))
                 : null;
+        lights.setQueueSensor(this);
     }
 
     /**
@@ -119,6 +126,14 @@ public final class WorldState {
 
     public IntersectionZones zones() {
         return zones;
+    }
+
+    public LightController lights() {
+        return lights;
+    }
+
+    public Optional<VehicleSpawner> spawner() {
+        return Optional.ofNullable(spawner);
     }
 
     /**
@@ -195,7 +210,7 @@ public final class WorldState {
     }
 
     /** @implNote Called from astra-engine. */
-    public WorldSnapshot toSnapshot(long tick, double simTimeSeconds) {
+    public WorldSnapshot toSnapshot(long tick, double simTimeSeconds, boolean paused, double speedFactor) {
         List<VehicleView> views = new ArrayList<>(vehicles.size());
         for (Vehicle vehicle : vehicles) {
             views.add(vehicle.toView());
@@ -207,10 +222,12 @@ public final class WorldState {
             Intersection at = light.intersection();
             IntersectionZone zone = zones.zoneOf(at);
             lightViews.add(new LightView(at.id(), at.x(), at.y(), state.colorFor(Axis.NS), state.colorFor(Axis.EW),
-                    state.name(), zone.occupancy(), zone.capacity()));
+                    state.name(), zone.occupancy(), zone.capacity(), queueLength(at, Axis.NS),
+                    queueLength(at, Axis.EW)));
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
-        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind());
+        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
+                speedFactor, stats.toView(), lights.mode());
     }
 
     /** @implNote Called from astra-engine. */
@@ -257,12 +274,14 @@ public final class WorldState {
 
     // Fase C. @implNote Called from astra-engine.
     private void commit(Road[] before, double dtSeconds) {
+        stats.advance(dtSeconds);
         for (int i = 0; i < before.length; i++) {
             Vehicle vehicle = vehicles.get(i);
             releaseIfClear(vehicle);
             if (vehicle.isFinished()) {
                 releaseAll(vehicle);
                 despawned++;
+                stats.recordArrival(vehicle.kind(), vehicle.tripSeconds(), vehicle.waitSeconds());
             } else if (!vehicle.currentRoad().equals(before[i]) && vehicle.strategy().isAdaptive()) {
                 vehicle.reroute(graph, vehicle.currentRoad().to());
             }
@@ -273,6 +292,35 @@ public final class WorldState {
         }
         rebuildIndex();
         occupancy.set(measureOccupancy());
+        Map<Intersection, Map<Axis, Integer>> measured = measureQueues();
+        queues.set(measured);
+        int totalQueue = measured.values().stream()
+                .flatMap(byAxis -> byAxis.values().stream())
+                .mapToInt(Integer::intValue)
+                .sum();
+        stats.sample(vehicles.size(), totalQueue);
+    }
+
+    /** @implNote Called from astra-lights-N: lee el último mapa inmutable publicado en la fase C. */
+    @Override
+    public int queueLength(Intersection at, Axis axis) {
+        Map<Axis, Integer> byAxis = queues.get().get(at);
+        return byAxis == null ? 0 : byAxis.getOrDefault(axis, 0);
+    }
+
+    // Demanda, no solo detenidos: en el eje en verde casi nadie está parado y SMART nunca extendería.
+    private Map<Intersection, Map<Axis, Integer>> measureQueues() {
+        Map<Intersection, Map<Axis, Integer>> counts = new HashMap<>();
+        for (Vehicle vehicle : vehicles) {
+            if (vehicle.remainingOnRoad() <= queueRadius) {
+                Road road = vehicle.currentRoad();
+                counts.computeIfAbsent(road.to(), i -> new EnumMap<>(Axis.class))
+                        .merge(Axis.of(road), 1, Integer::sum);
+            }
+        }
+        Map<Intersection, Map<Axis, Integer>> frozen = new HashMap<>();
+        counts.forEach((at, byAxis) -> frozen.put(at, Map.copyOf(byAxis)));
+        return Map.copyOf(frozen);
     }
 
     private double freeDistance(Vehicle vehicle, Map<Road, List<Vehicle>> byRoad) {

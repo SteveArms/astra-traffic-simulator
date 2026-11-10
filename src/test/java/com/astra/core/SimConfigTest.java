@@ -28,6 +28,9 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
+        assertEquals(Duration.ofSeconds(2), config.smartExtensionStepSeconds());
+        assertEquals(120, config.smartQueueRadius());
+        assertStats(config);
         assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
@@ -63,6 +66,9 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(1), config.allRedSeconds());
         assertEquals(5, config.smartQueueThreshold());
         assertEquals(Duration.ofSeconds(6), config.smartMaxExtensionSeconds());
+        assertEquals(Duration.ofSeconds(2), config.smartExtensionStepSeconds());
+        assertEquals(120, config.smartQueueRadius());
+        assertStats(config);
         assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
@@ -151,7 +157,9 @@ class SimConfigTest {
         SimConfig.CAR_LENGTH, SimConfig.BUS_MAX_SPEED, SimConfig.BUS_ACCELERATION, SimConfig.BUS_DECELERATION,
         SimConfig.BUS_LENGTH, SimConfig.AMBULANCE_MAX_SPEED, SimConfig.AMBULANCE_ACCELERATION,
         SimConfig.AMBULANCE_DECELERATION, SimConfig.AMBULANCE_LENGTH, SimConfig.EMERGENCY_PREEMPT_DISTANCE,
-        SimConfig.EMERGENCY_MAX_SECONDS, SimConfig.SPAWN_SEED
+        SimConfig.EMERGENCY_MAX_SECONDS, SimConfig.SPAWN_SEED, SimConfig.SMART_EXTENSION_STEP_SECONDS,
+        SimConfig.SMART_QUEUE_RADIUS, SimConfig.STATS_THROUGHPUT_WINDOW_SECONDS, SimConfig.STATS_SAMPLE_SECONDS,
+        SimConfig.STATS_SERIES_CAPACITY
     })
     void newKeysRejectNonPositiveValues(String key) {
         var props = new Properties();
@@ -242,5 +250,11 @@ class SimConfigTest {
         assertEquals(new VehicleSpec(14, 3, 6, 12), config.specFor(VehicleKind.CAR));
         assertEquals(new VehicleSpec(9, 1.5, 4, 20), config.specFor(VehicleKind.BUS));
         assertEquals(new VehicleSpec(20, 4, 8, 14), config.specFor(VehicleKind.AMBULANCE));
+    }
+
+    private static void assertStats(SimConfig config) {
+        assertEquals(Duration.ofSeconds(60), config.statsThroughputWindow());
+        assertEquals(Duration.ofSeconds(1), config.statsSampleInterval());
+        assertEquals(300, config.statsSeriesCapacity());
     }
 }

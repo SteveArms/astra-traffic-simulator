@@ -1,0 +1,249 @@
+/* Tema oscuro de ASTRA. Contrastes medidos (WCAG): texto 11.8:1 y secundario 6.0:1 sobre el panel,
+   bordes de control 3.0:1, acento 4.6:1 como anillo de foco y texto oscuro sobre acento 5.9:1. */
+
+.root {
+    astra-bg: #1e1f24;
+    astra-surface: #26282f;
+    astra-control: #30333b;
+    astra-control-hover: #393c45;
+    astra-border: #6b7280;
+    astra-grid: #3a3d46;
+    astra-accent: #4f8cff;
+    astra-accent-hover: #6a9eff;
+    astra-on-accent: #0b1020;
+    astra-text: #e6e6e6;
+    astra-text-secondary: #a1a6b0;
+    astra-series-wait: #3987e5;
+    astra-series-throughput: #d95926;
+
+    -fx-base: astra-control;
+    -fx-background: astra-bg;
+    -fx-control-inner-background: astra-control;
+    -fx-accent: astra-accent;
+    -fx-focus-color: astra-accent;
+    -fx-faint-focus-color: transparent;
+    -fx-text-base-color: astra-text;
+    -fx-text-background-color: astra-text;
+    -fx-mark-color: astra-text;
+    -fx-font-size: 13px;
+    -fx-background-color: astra-bg;
+}
+
+/* Paneles: 16 px entre secciones, 8 px dentro de cada una. */
+.panel {
+    -fx-background-color: astra-surface;
+    -fx-padding: 16;
+    -fx-spacing: 16;
+}
+
+.section {
+    -fx-spacing: 8;
+}
+
+.row {
+    -fx-spacing: 8;
+}
+
+.section-title {
+    -fx-text-fill: astra-text-secondary;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.label {
+    -fx-text-fill: astra-text;
+}
+
+.field-label,
+.stats-key {
+    -fx-text-fill: astra-text-secondary;
+    -fx-min-width: 76;
+}
+
+.stats-grid {
+    -fx-hgap: 12;
+    -fx-vgap: 4;
+}
+
+/* Botones y toggles: borde de 3:1 para que se lean como controles. */
+.button,
+.toggle-button {
+    -fx-background-color: astra-border, astra-control;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6, 5;
+    -fx-text-fill: astra-text;
+    -fx-padding: 6 12;
+}
+
+.button:hover,
+.toggle-button:hover {
+    -fx-background-color: astra-border, astra-control-hover;
+}
+
+.button:pressed,
+.toggle-button:pressed {
+    -fx-scale-x: 0.96;
+    -fx-scale-y: 0.96;
+}
+
+.button.primary,
+.toggle-button:selected {
+    -fx-background-color: astra-accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6;
+    -fx-text-fill: astra-on-accent;
+}
+
+.button.primary:hover,
+.toggle-button:selected:hover {
+    -fx-background-color: astra-accent-hover;
+}
+
+/* Anillo de foco solo con teclado: 2 px de acento separados del control por 1 px de panel. */
+.button:focus-visible,
+.toggle-button:focus-visible,
+.choice-box:focus-visible {
+    -fx-background-color: astra-accent, astra-surface, astra-border, astra-control;
+    -fx-background-insets: -3, -1, 0, 1;
+    -fx-background-radius: 9, 7, 6, 5;
+}
+
+.button.primary:focus-visible,
+.toggle-button:selected:focus-visible {
+    -fx-background-color: astra-accent, astra-surface, astra-accent;
+    -fx-background-insets: -3, -1, 0;
+    -fx-background-radius: 9, 7, 6;
+}
+
+.choice-box {
+    -fx-background-color: astra-border, astra-control;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6, 5;
+    -fx-padding: 2 4;
+}
+
+.choice-box > .label {
+    -fx-text-fill: astra-text;
+}
+
+.choice-box > .open-button > .arrow {
+    -fx-background-color: astra-text-secondary;
+}
+
+.context-menu {
+    -fx-background-color: astra-border, astra-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6, 5;
+    -fx-padding: 4;
+}
+
+.menu-item:focused {
+    -fx-background-color: astra-accent;
+    -fx-background-radius: 4;
+}
+
+.menu-item:focused > .label {
+    -fx-text-fill: astra-on-accent;
+}
+
+.slider .track {
+    -fx-background-color: astra-border, astra-control;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+}
+
+.slider .thumb {
+    -fx-background-color: astra-accent;
+    -fx-background-radius: 8;
+    -fx-padding: 7;
+}
+
+.slider:focus-visible .thumb {
+    -fx-background-color: astra-text, astra-accent;
+    -fx-background-insets: -2, 0;
+}
+
+.slider .axis {
+    -fx-tick-label-fill: astra-text-secondary;
+    -fx-tick-mark-stroke: astra-border;
+}
+
+.list-view {
+    -fx-background-color: astra-border, astra-bg;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6, 5;
+    -fx-padding: 1;
+}
+
+.list-view .placeholder .label {
+    -fx-text-fill: astra-text-secondary;
+}
+
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: astra-text;
+    -fx-padding: 4 8;
+}
+
+.list-cell:filled:selected {
+    -fx-background-color: astra-control-hover;
+}
+
+.tooltip {
+    -fx-background-color: astra-control;
+    -fx-text-fill: astra-text;
+    -fx-font-size: 12px;
+    -fx-background-radius: 6;
+}
+
+/* Gráficas: rejilla recesiva, sin fondo propio y una serie por gráfica con trazo de 2 px. */
+.chart {
+    -fx-padding: 0;
+}
+
+.chart-title {
+    -fx-text-fill: astra-text;
+    -fx-font-size: 12px;
+}
+
+.chart-plot-background {
+    -fx-background-color: transparent;
+}
+
+.chart-vertical-grid-lines,
+.chart-horizontal-grid-lines {
+    -fx-stroke: astra-grid;
+}
+
+.chart-vertical-zero-line,
+.chart-horizontal-zero-line,
+.chart-alternative-row-fill,
+.chart-alternative-column-fill {
+    -fx-stroke: transparent;
+    -fx-fill: transparent;
+}
+
+.axis {
+    -fx-tick-label-fill: astra-text-secondary;
+    -fx-tick-label-font-size: 12px;
+}
+
+.axis-label {
+    -fx-text-fill: astra-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.axis-tick-mark,
+.axis-minor-tick-mark {
+    -fx-stroke: astra-border;
+}
+
+.wait-chart .chart-series-line {
+    -fx-stroke: astra-series-wait;
+    -fx-stroke-width: 2px;
+}
+
+.throughput-chart .chart-series-line {
+    -fx-stroke: astra-series-throughput;
+    -fx-stroke-width: 2px;
+}

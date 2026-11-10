@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -87,6 +88,34 @@ public final class VehicleSpawner {
         return Collections.unmodifiableMap(spawnedByKind);
     }
 
+    /**
+     * Genera ahora un vehículo pedido por el usuario. Un extremo {@code null} se sortea entre los bordes (distinto
+     * del otro extremo).
+     *
+     * @return vacío si se alcanzó {@code vehicle.maxCount}, no hay ruta (incluye origen = destino) o no hay espacio
+     * @implNote Called from astra-engine (SpawnVehicleCmd), or before the engine starts.
+     */
+    public Optional<Vehicle> spawnNow(VehicleKind kind, RouteStrategy strategy, Intersection origin,
+            Intersection dest) {
+        Objects.requireNonNull(kind, "kind");
+        Objects.requireNonNull(strategy, "strategy");
+        if (world.vehicleCount() >= maxCount) {
+            return Optional.empty();
+        }
+        Intersection from = origin != null ? origin : randomBorderExcept(dest);
+        Intersection to = dest != null ? dest : randomBorderExcept(from);
+        return place(kind, strategy, from, to);
+    }
+
+    /**
+     * Estrategia nueva con los parámetros y la ocupación de este mundo.
+     *
+     * @throws IllegalArgumentException si el nombre no existe
+     */
+    public RouteStrategy strategyNamed(String name) {
+        return RouteStrategies.byName(name, world::currentOccupancy, cfg, random);
+    }
+
     /** Intersecciones de entrada y salida, ordenadas por id. */
     public List<Intersection> border() {
         return border;
@@ -105,13 +134,28 @@ public final class VehicleSpawner {
         if (destination.equals(origin)) {
             destination = border.get(border.size() - 1);
         }
+        place(kind, strategy, origin, destination);
+    }
+
+    private Optional<Vehicle> place(VehicleKind kind, RouteStrategy strategy, Intersection origin,
+            Intersection destination) {
+        if (origin.equals(destination)) {
+            return Optional.empty();
+        }
         List<Road> route = strategy.route(world.graph(), origin, destination);
         if (route.isEmpty() || !hasRoom(route.get(0), cfg.specFor(kind).length())) {
-            return;
+            return Optional.empty();
         }
         Vehicle vehicle = factory.create(kind, strategy, route);
         world.addVehicle(vehicle);
         spawnedByKind.merge(kind, 1, Integer::sum);
+        return Optional.of(vehicle);
+    }
+
+    private Intersection randomBorderExcept(Intersection excluded) {
+        List<Intersection> candidates =
+                excluded == null ? border : border.stream().filter(i -> !i.equals(excluded)).toList();
+        return candidates.get(random.nextInt(candidates.size()));
     }
 
     // El que nace queda en el centro de su origen: necesita sitio en su vía y en la zona.

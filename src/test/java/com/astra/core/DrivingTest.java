@@ -225,21 +225,26 @@ class DrivingTest {
         props.setProperty(SimConfig.INTERSECTION_CAPACITY, "1");
         build(SimConfig.from(props));
         TestLights.force(light, new GreenState(Axis.EW));
-        Vehicle first = addCar(westIn, eastOut);
-        Vehicle second = addCar(eastIn, westOut);
+        Vehicle fromWest = addCar(westIn, eastOut);
+        Vehicle fromEast = addCar(eastIn, westOut);
 
-        stepUntil(() -> zone.contains(first.id()));
-        boolean secondWaited = false;
-        while (zone.contains(first.id())) {
+        // Llegan a la vez y en paralelo: cualquiera de los dos puede ganar la zona.
+        stepUntil(() -> zone.contains(fromWest.id()) || zone.contains(fromEast.id()));
+        Vehicle winner = zone.contains(fromWest.id()) ? fromWest : fromEast;
+        Vehicle waiting = winner == fromWest ? fromEast : fromWest;
+        Road waitingIn = waiting == fromWest ? westIn : eastIn;
+        Road waitingOut = waiting == fromWest ? eastOut : westOut;
+        boolean waited = false;
+        while (zone.contains(winner.id())) {
             assertEquals(1, zone.occupancy());
-            assertEquals(eastIn, second.currentRoad());
-            assertTrue(second.offset() <= stopLine(eastIn) + EPS, "second crossed the line");
-            secondWaited |= second.speed() < EPS;
+            assertEquals(waitingIn, waiting.currentRoad());
+            assertTrue(waiting.offset() <= stopLine(waitingIn) + EPS, "waiting car crossed the line");
+            waited |= waiting.speed() < EPS;
             engine.step();
         }
-        assertTrue(secondWaited);
+        assertTrue(waited);
 
-        stepUntil(() -> second.currentRoad().equals(westOut));
+        stepUntil(() -> waiting.currentRoad().equals(waitingOut));
     }
 
     @Test

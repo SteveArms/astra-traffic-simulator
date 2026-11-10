@@ -97,6 +97,22 @@ class VehicleTest {
     }
 
     @Test
+    void accumulatesTripAndWaitTime() {
+        var car = car(ab, bc);
+        for (int i = 0; i < 10; i++) {
+            car.update(0.1, 0);
+        }
+        assertEquals(1.0, car.tripSeconds(), DELTA);
+        assertEquals(1.0, car.waitSeconds(), DELTA);
+
+        for (int i = 0; i < 10; i++) {
+            car.update(0.1, FREE);
+        }
+        assertEquals(2.0, car.tripSeconds(), DELTA);
+        assertTrue(car.waitSeconds() < 2.0, "moving time is not waiting");
+    }
+
+    @Test
     void finishesAtDestination() {
         var car = car(ab, bc);
         for (int i = 0; i < 10_000 && !car.isFinished(); i++) {

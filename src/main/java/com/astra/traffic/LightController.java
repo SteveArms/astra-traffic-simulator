@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.DoubleSupplier;
 
 /** Semáforos donde entran 3+ vías de los dos ejes (no en esquinas en L). Consultas desde cualquier hilo. */
 public final class LightController {
@@ -27,10 +28,26 @@ public final class LightController {
 
     private final Map<Intersection, TrafficLight> lights;
     private volatile ScheduledExecutorService executor;
+    private volatile LightMode mode = LightMode.FIXED;
+    private volatile QueueSensor queueSensor = QueueSensor.NONE;
 
     public LightController(RoadGraph graph, LightTimings timings) {
+        this(graph, timings, () -> 1.0);
+    }
+
+    public LightController(RoadGraph graph, LightTimings timings, DoubleSupplier speedFactor) {
+        this(graph, timings, SmartTimings.NEVER_EXTEND, speedFactor);
+    }
+
+    /** Cada fase dura {@code duración / speedFactor}; sin {@code smartTimings} SMART nunca extiende. */
+    public LightController(RoadGraph graph, LightTimings timings, SmartTimings smartTimings,
+            DoubleSupplier speedFactor) {
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(timings, "timings");
+        Objects.requireNonNull(smartTimings, "smartTimings");
+        Objects.requireNonNull(speedFactor, "speedFactor");
+        // El sensor real (el mundo) se conecta después con setQueueSensor.
+        QueueSensor sensor = (at, axis) -> queueSensor.queueLength(at, axis);
         Map<Intersection, Set<Axis>> incomingAxes = new HashMap<>();
         Map<Intersection, Integer> incomingCount = new HashMap<>();
         for (Road road : graph.edges()) {
@@ -48,7 +65,8 @@ public final class LightController {
                 // Damero: vecinas con ejes opuestos.
                 int parity = columns.indexOf(intersection.x()) + rows.indexOf(intersection.y());
                 Axis first = parity % 2 == 0 ? Axis.NS : Axis.EW;
-                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first)));
+                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first), speedFactor,
+                        this::mode, sensor, smartTimings));
             }
         }
         lights = Map.copyOf(created);
@@ -89,6 +107,35 @@ public final class LightController {
     public boolean isRunning() {
         ScheduledExecutorService current = executor;
         return current != null && !current.isShutdown();
+    }
+
+    /**
+     * Congela todos los semáforos guardando el tiempo que le falta a cada fase.
+     *
+     * @implNote Called from the thread that pauses the simulation (usually astra-engine), outside any other lock.
+     */
+    public void pause() {
+        lights.values().forEach(TrafficLight::pause);
+    }
+
+    /** @implNote Called from the thread that resumes the simulation (usually astra-engine). */
+    public void resume() {
+        lights.values().forEach(TrafficLight::resume);
+    }
+
+    /** @implNote Called before the lights start, from the WorldState constructor. */
+    public void setQueueSensor(QueueSensor sensor) {
+        this.queueSensor = Objects.requireNonNull(sensor, "sensor");
+    }
+
+    /** Aplica desde el próximo verde. @implNote Safe to call from any thread (usually astra-engine). */
+    public void setMode(LightMode mode) {
+        this.mode = Objects.requireNonNull(mode, "mode");
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public LightMode mode() {
+        return mode;
     }
 
     public Optional<TrafficLight> lightAt(Intersection intersection) {

@@ -17,6 +17,9 @@ import java.util.Optional;
  */
 public abstract class Vehicle {
 
+    /** Por debajo de esta velocidad (px/s) el tiempo cuenta como espera. */
+    public static final double WAITING_SPEED = 0.5;
+
     private final String id;
     private final VehicleKind kind;
     private final VehicleSpec spec;
@@ -29,6 +32,8 @@ public abstract class Vehicle {
     private double offset;
     private double speed;
     private boolean finished;
+    private double tripSeconds;
+    private double waitSeconds;
 
     /** La ruta se asigna después con {@link #assignRoute}; normalmente lo hace {@link VehicleFactory}. */
     protected Vehicle(String id, VehicleKind kind, VehicleSpec spec, RouteStrategy strategy, Intersection origin,
@@ -78,11 +83,19 @@ public abstract class Vehicle {
         roadIndex = 0;
     }
 
-    /** @param freeDistance distancia disponible antes de tener que estar detenido */
+    /** Acumula también viaje y espera. @implNote Called from astra-worker-N (fase B), solo sobre sí mismo. */
     public void update(double dtSeconds, double freeDistance) {
         if (finished) {
             return;
         }
+        move(dtSeconds, freeDistance);
+        tripSeconds += dtSeconds;
+        if (!finished && speed < WAITING_SPEED) {
+            waitSeconds += dtSeconds;
+        }
+    }
+
+    private void move(double dtSeconds, double freeDistance) {
         double free = Math.max(0, freeDistance);
         // Velocidad desde la que todavía se puede frenar dentro de free.
         double target = Math.min(speedCap(), Math.sqrt(2 * spec.deceleration() * free));
@@ -189,6 +202,14 @@ public abstract class Vehicle {
 
     public double speed() {
         return speed;
+    }
+
+    public double tripSeconds() {
+        return tripSeconds;
+    }
+
+    public double waitSeconds() {
+        return waitSeconds;
     }
 
     public double length() {

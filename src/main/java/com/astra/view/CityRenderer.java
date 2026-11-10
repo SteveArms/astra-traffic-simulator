@@ -1,5 +1,7 @@
 package com.astra.view;
 
+import com.astra.command.CommandBus;
+import com.astra.command.Commands;
 import com.astra.core.LightView;
 import com.astra.core.WorldSnapshot;
 import com.astra.graph.Intersection;
@@ -7,26 +9,35 @@ import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javafx.animation.AnimationTimer;
 import javafx.geometry.VPos;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.input.ContextMenuEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 /**
- * Capa estática (calles) y capa dinámica (semáforos, vehículos y HUD) dibujada desde el último snapshot.
+ * Capa estática (calles) y capa dinámica (semáforos, colas, vehículos y HUD) dibujada desde el último snapshot.
+ * Clic selecciona un semáforo; clic derecho abre "Forzar verde", que solo envía un comando al bus.
  *
  * @implNote Called from the FX Application Thread.
  */
@@ -55,6 +66,12 @@ public final class CityRenderer extends StackPane {
     private static final double LIGHT_OFFSET = 8;
     private static final double FULL_BORDER_WIDTH = 2;
 
+    private static final double HIT_RADIUS = INTERSECTION_SIZE / 2 + 4;
+    private static final double SELECTION_GAP = 3;
+    private static final double SELECTION_WIDTH = 2;
+    private static final Font QUEUE_FONT = Font.font("System", 12);
+    private static final Font PAUSE_FONT = Font.font("System", FontWeight.BOLD, 28);
+
     private static final Font HUD_FONT = Font.font("Monospaced", 13);
     private static final double HUD_MARGIN = 8;
     private static final double HUD_PADDING = 8;
@@ -82,9 +99,14 @@ public final class CityRenderer extends StackPane {
     private static final Color LIGHT_GREEN = Color.web("#4ADE80");
     private static final Color LIGHT_YELLOW = Color.web("#FACC15");
     private static final Color LIGHT_RED = Color.web("#F87171");
+    // Acento de la interfaz: 5.1:1 contra el fondo; el hueco SELECTION_GAP lo separa del gris de la calle.
+    private static final Color SELECTION = Color.web("#4F8CFF");
+    private static final Color PAUSE_VEIL = Color.web("#030712", 0.6);
 
     private final RoadGraph graph;
     private final Supplier<WorldSnapshot> snapshotSource;
+    private final CommandBus bus;
+    private final ContextMenu lightMenu = new ContextMenu();
     private final Map<String, Set<Side>> approaches;
     private final Canvas staticLayer = new Canvas();
     private final Canvas dynamicLayer = new Canvas();
@@ -96,15 +118,22 @@ public final class CityRenderer extends StackPane {
     private long fpsWindowStart;
     private int framesInWindow;
     private int fps;
+    private String selectedId;
+    private Consumer<String> onIntersectionSelected = id -> { };
 
-    public CityRenderer(RoadGraph graph, Supplier<WorldSnapshot> snapshotSource) {
+    public CityRenderer(RoadGraph graph, Supplier<WorldSnapshot> snapshotSource, CommandBus bus) {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
+        this.bus = Objects.requireNonNull(bus, "bus");
         this.approaches = approachesOf(graph);
+        setOnMouseClicked(this::onClick);
+        setOnContextMenuRequested(this::onContextMenu);
 
         // Si no, el StackPane no puede encogerse por debajo de los Canvas.
         setMinSize(0, 0);
         for (Canvas layer : new Canvas[] {staticLayer, dynamicLayer}) {
+            // Sin gestionar: si no, el tamaño del Canvas alimenta el preferido del panel y empuja a los vecinos.
+            layer.setManaged(false);
             layer.widthProperty().bind(widthProperty());
             layer.heightProperty().bind(heightProperty());
         }
@@ -127,6 +156,55 @@ public final class CityRenderer extends StackPane {
 
     public void stop() {
         timer.stop();
+        lightMenu.hide();
+    }
+
+    public void setOnIntersectionSelected(Consumer<String> listener) {
+        onIntersectionSelected = Objects.requireNonNull(listener, "listener");
+    }
+
+    /** Resalta una intersección elegida desde otro control; no vuelve a notificar. */
+    public void select(String intersectionId) {
+        selectedId = intersectionId;
+    }
+
+    private void onClick(MouseEvent e) {
+        if (e.getButton() != MouseButton.PRIMARY) {
+            return;
+        }
+        String id = lightAt(e.getX(), e.getY());
+        if (id != null) {
+            choose(id);
+        }
+    }
+
+    private void onContextMenu(ContextMenuEvent e) {
+        String id = lightAt(e.getX(), e.getY());
+        if (id == null) {
+            return;
+        }
+        choose(id);
+        MenuItem ns = new MenuItem("Forzar verde NS");
+        ns.setOnAction(a -> bus.submit(Commands.forceLight(id, Axis.NS)));
+        MenuItem ew = new MenuItem("Forzar verde EW");
+        ew.setOnAction(a -> bus.submit(Commands.forceLight(id, Axis.EW)));
+        lightMenu.getItems().setAll(ns, ew);
+        lightMenu.show(this, e.getScreenX(), e.getScreenY());
+        e.consume();
+    }
+
+    private void choose(String id) {
+        selectedId = id;
+        onIntersectionSelected.accept(id);
+    }
+
+    private String lightAt(double x, double y) {
+        for (LightView light : snapshotSource.get().lights()) {
+            if (Math.abs(x - offsetX - light.x()) <= HIT_RADIUS && Math.abs(y - offsetY - light.y()) <= HIT_RADIUS) {
+                return light.intersectionId();
+            }
+        }
+        return null;
     }
 
     private void drawStatic() {
@@ -202,6 +280,10 @@ public final class CityRenderer extends StackPane {
         for (LightView light : snapshot.lights()) {
             drawZone(gc, light);
             drawLight(gc, light);
+            drawQueues(gc, light);
+            if (light.intersectionId().equals(selectedId)) {
+                drawSelection(gc, light);
+            }
         }
         boolean stripeOn = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / AMBULANCE_BLINK_MILLIS) % 2 == 0;
         for (VehicleView vehicle : snapshot.vehicles()) {
@@ -209,6 +291,39 @@ public final class CityRenderer extends StackPane {
         }
         gc.restore();
         drawHud(gc, snapshot);
+        if (snapshot.paused()) {
+            drawPauseOverlay(gc);
+        }
+    }
+
+    // Demanda por eje junto a la esquina superior derecha: ↕ = NS, ↔ = EW.
+    private void drawQueues(GraphicsContext gc, LightView light) {
+        double half = INTERSECTION_SIZE / 2;
+        gc.setFont(QUEUE_FONT);
+        gc.setFill(LABEL_TEXT);
+        gc.setTextAlign(TextAlignment.LEFT);
+        gc.setTextBaseline(VPos.BOTTOM);
+        gc.fillText("↕%d ↔%d".formatted(light.queueNs(), light.queueEw()),
+                light.x() + half + LABEL_GAP, light.y() - half - LABEL_GAP);
+    }
+
+    private void drawSelection(GraphicsContext gc, LightView light) {
+        double inset = INTERSECTION_SIZE / 2 + SELECTION_GAP + SELECTION_WIDTH / 2;
+        gc.setStroke(SELECTION);
+        gc.setLineWidth(SELECTION_WIDTH);
+        gc.strokeRect(light.x() - inset, light.y() - inset, 2 * inset, 2 * inset);
+    }
+
+    private void drawPauseOverlay(GraphicsContext gc) {
+        double width = dynamicLayer.getWidth();
+        double height = dynamicLayer.getHeight();
+        gc.setFill(PAUSE_VEIL);
+        gc.fillRect(0, 0, width, height);
+        gc.setFill(HUD_TEXT);
+        gc.setFont(PAUSE_FONT);
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.setTextBaseline(VPos.CENTER);
+        gc.fillText("PAUSA", width / 2, height / 2);
     }
 
     private void drawZone(GraphicsContext gc, LightView light) {
