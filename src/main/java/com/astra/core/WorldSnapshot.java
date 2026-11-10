@@ -11,11 +11,14 @@ import java.util.Map;
  * @param spawned      vehículos agregados desde el inicio
  * @param despawned    vehículos que terminaron su ruta y salieron
  * @param activeByKind vehículos en circulación por tipo
+ * @param paused       el mundo está congelado (el tick sigue avanzando, el tiempo simulado no)
+ * @param speedFactor  multiplicador de velocidad vigente
  */
 public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights,
-        long spawned, long despawned, Map<VehicleKind, Integer> activeByKind) {
+        long spawned, long despawned, Map<VehicleKind, Integer> activeByKind, boolean paused, double speedFactor) {
 
-    public static final WorldSnapshot EMPTY = new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of());
+    public static final WorldSnapshot EMPTY =
+            new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of(), false, 1.0);
 
     public WorldSnapshot {
         vehicles = List.copyOf(vehicles);

@@ -56,7 +56,7 @@ class WorldSnapshotTest {
     void countersAndActiveByKindAreCopied() {
         var active = new EnumMap<VehicleKind, Integer>(VehicleKind.class);
         active.put(VehicleKind.CAR, 1);
-        var snapshot = new WorldSnapshot(1, 0.05, List.of(CAR), List.of(), 5, 4, active);
+        var snapshot = new WorldSnapshot(1, 0.05, List.of(CAR), List.of(), 5, 4, active, false, 1.0);
 
         active.put(VehicleKind.CAR, 9);
 
@@ -69,7 +69,8 @@ class WorldSnapshotTest {
 
     @Test
     void nullsAreRejected() {
-        assertThrows(NullPointerException.class, () -> new WorldSnapshot(1, 0, null, List.of(), 0, 0, Map.of()));
+        assertThrows(NullPointerException.class,
+                () -> new WorldSnapshot(1, 0, null, List.of(), 0, 0, Map.of(), false, 1.0));
         assertThrows(NullPointerException.class,
                 () -> new VehicleView(null, VehicleKind.CAR, 0, 0, 0, 0, 12, "SHORTEST"));
         assertThrows(NullPointerException.class,
@@ -88,7 +89,7 @@ class WorldSnapshotTest {
     }
 
     private static WorldSnapshot snapshot(List<VehicleView> vehicles, List<LightView> lights) {
-        return new WorldSnapshot(1, 0.05, vehicles, lights, 0, 0, Map.of());
+        return new WorldSnapshot(1, 0.05, vehicles, lights, 0, 0, Map.of(), false, 1.0);
     }
 
     @Test

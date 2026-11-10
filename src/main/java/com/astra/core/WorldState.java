@@ -195,7 +195,7 @@ public final class WorldState {
     }
 
     /** @implNote Called from astra-engine. */
-    public WorldSnapshot toSnapshot(long tick, double simTimeSeconds) {
+    public WorldSnapshot toSnapshot(long tick, double simTimeSeconds, boolean paused, double speedFactor) {
         List<VehicleView> views = new ArrayList<>(vehicles.size());
         for (Vehicle vehicle : vehicles) {
             views.add(vehicle.toView());
@@ -210,7 +210,8 @@ public final class WorldState {
                     state.name(), zone.occupancy(), zone.capacity()));
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
-        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind());
+        return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
+                speedFactor);
     }
 
     /** @implNote Called from astra-engine. */

@@ -12,6 +12,9 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Bucle de paso fijo en el hilo {@code astra-engine}: ejecuta los comandos pendientes, genera vehículos, actualiza
  * el mundo y publica un {@link WorldSnapshot} por tick. Tanto el bucle como {@link #step()} corren en ese hilo.
+ *
+ * <p>En pausa el motor no se bloquea: sigue drenando comandos (para poder recibir la reanudación) y publicando
+ * snapshots, pero no actualiza el mundo salvo que haya pasos pedidos con {@link SimulationControl#requestStep()}.
  */
 public final class SimulationEngine {
 
@@ -22,6 +25,7 @@ public final class SimulationEngine {
 
     private final WorldState world;
     private final CommandBus commandBus;
+    private final SimulationControl control;
     private final long tickMillis;
     private final double dtSeconds;
     private final AtomicReference<WorldSnapshot> latest = new AtomicReference<>(WorldSnapshot.EMPTY);
@@ -44,8 +48,14 @@ public final class SimulationEngine {
     }
 
     public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner, CommandBus commandBus) {
+        this(config, world, spawner, commandBus, new SimulationControl());
+    }
+
+    public SimulationEngine(SimConfig config, WorldState world, VehicleSpawner spawner, CommandBus commandBus,
+            SimulationControl control) {
         this.world = Objects.requireNonNull(world, "world");
         this.commandBus = Objects.requireNonNull(commandBus, "commandBus");
+        this.control = Objects.requireNonNull(control, "control");
         if (spawner != null) {
             world.setSpawner(spawner);
         }
@@ -121,6 +131,11 @@ public final class SimulationEngine {
         return commandBus;
     }
 
+    /** @implNote Safe to call from any thread. */
+    public SimulationControl control() {
+        return control;
+    }
+
     /** Ticks completados. @implNote Called from the astra-engine thread (p. ej. desde un Command). */
     public long currentTick() {
         return tick;
@@ -154,9 +169,17 @@ public final class SimulationEngine {
 
     private void tick() {
         commandBus.drainTo(this);
-        world.update(dtSeconds);
+        boolean paused = control.pauseGate().isPaused();
+        double speed = control.speedFactor();
+        if (paused && !control.tryConsumeStep()) {
+            tick++;
+            latest.set(world.toSnapshot(tick, simTimeSeconds, true, speed));
+            return;
+        }
+        double dt = dtSeconds * speed;
+        world.update(dt);
         tick++;
-        simTimeSeconds += dtSeconds;
-        latest.set(world.toSnapshot(tick, simTimeSeconds));
+        simTimeSeconds += dt;
+        latest.set(world.toSnapshot(tick, simTimeSeconds, paused, speed));
     }
 }

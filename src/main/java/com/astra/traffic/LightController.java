@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.DoubleSupplier;
 
 /** Semáforos donde entran 3+ vías de los dos ejes (no en esquinas en L). Consultas desde cualquier hilo. */
 public final class LightController {
@@ -29,8 +30,17 @@ public final class LightController {
     private volatile ScheduledExecutorService executor;
 
     public LightController(RoadGraph graph, LightTimings timings) {
+        this(graph, timings, () -> 1.0);
+    }
+
+    /**
+     * @param speedFactor multiplicador de velocidad de la simulación; cada fase dura {@code duración / speedFactor}
+     *                    y el valor se lee al programar cada transición
+     */
+    public LightController(RoadGraph graph, LightTimings timings, DoubleSupplier speedFactor) {
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(timings, "timings");
+        Objects.requireNonNull(speedFactor, "speedFactor");
         Map<Intersection, Set<Axis>> incomingAxes = new HashMap<>();
         Map<Intersection, Integer> incomingCount = new HashMap<>();
         for (Road road : graph.edges()) {
@@ -48,7 +58,7 @@ public final class LightController {
                 // Damero: vecinas con ejes opuestos.
                 int parity = columns.indexOf(intersection.x()) + rows.indexOf(intersection.y());
                 Axis first = parity % 2 == 0 ? Axis.NS : Axis.EW;
-                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first)));
+                created.put(intersection, new TrafficLight(intersection, timings, new GreenState(first), speedFactor));
             }
         }
         lights = Map.copyOf(created);
@@ -89,6 +99,20 @@ public final class LightController {
     public boolean isRunning() {
         ScheduledExecutorService current = executor;
         return current != null && !current.isShutdown();
+    }
+
+    /**
+     * Congela todos los semáforos guardando el tiempo que le falta a cada fase.
+     *
+     * @implNote Called from the thread that pauses the simulation (usually astra-engine), outside any other lock.
+     */
+    public void pause() {
+        lights.values().forEach(TrafficLight::pause);
+    }
+
+    /** @implNote Called from the thread that resumes the simulation (usually astra-engine). */
+    public void resume() {
+        lights.values().forEach(TrafficLight::resume);
     }
 
     public Optional<TrafficLight> lightAt(Intersection intersection) {

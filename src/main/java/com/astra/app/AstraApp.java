@@ -1,7 +1,10 @@
 package com.astra.app;
 
+import com.astra.command.CommandBus;
 import com.astra.core.IntersectionZones;
+import com.astra.core.PauseListener;
 import com.astra.core.SimConfig;
+import com.astra.core.SimulationControl;
 import com.astra.core.SimulationEngine;
 import com.astra.core.VehicleSpawner;
 import com.astra.core.WorldState;
@@ -27,9 +30,11 @@ public final class AstraApp extends Application {
     public void start(Stage stage) {
         SimConfig config = SimConfig.load();
         MapLoader.LoadedMap map = MapLoader.load(config.mapFile());
-        lights = new LightController(map.graph(), config);
+        var control = new SimulationControl();
+        lights = new LightController(map.graph(), config, control::speedFactor);
+        control.pauseGate().addListener(PauseListener.of(lights::pause, lights::resume));
         var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config));
-        engine = new SimulationEngine(config, world, new VehicleSpawner(world, config));
+        engine = new SimulationEngine(config, world, new VehicleSpawner(world, config), new CommandBus(), control);
         renderer = new CityRenderer(map.graph(), engine::latestSnapshot);
 
         var root = new BorderPane();
