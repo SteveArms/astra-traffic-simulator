@@ -121,6 +121,14 @@ public final class WorldState {
         return zones;
     }
 
+    public LightController lights() {
+        return lights;
+    }
+
+    public Optional<VehicleSpawner> spawner() {
+        return Optional.ofNullable(spawner);
+    }
+
     /**
      * Nace en el centro de la intersección de origen, así que intenta reservar su zona hasta salir del box.
      *

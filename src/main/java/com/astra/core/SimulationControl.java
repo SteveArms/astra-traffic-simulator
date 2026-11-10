@@ -30,7 +30,15 @@ public final class SimulationControl {
 
     /** Pide un tick más con el mundo en pausa. */
     public void requestStep() {
-        pendingSteps.incrementAndGet();
+        requestSteps(1);
+    }
+
+    /** Pide {@code count} ticks más con el mundo en pausa. */
+    public void requestSteps(int count) {
+        if (count < 1) {
+            throw new IllegalArgumentException("count must be >= 1: " + count);
+        }
+        pendingSteps.addAndGet(count);
     }
 
     public int pendingSteps() {

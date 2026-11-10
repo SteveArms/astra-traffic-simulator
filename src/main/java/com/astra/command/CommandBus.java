@@ -20,6 +20,9 @@ public final class CommandBus {
     private final AtomicLong submitted = new AtomicLong();
     private final AtomicLong executed = new AtomicLong();
     private final AtomicLong failed = new AtomicLong();
+    private final AtomicLong ignored = new AtomicLong();
+    // Motivo que dio el comando en curso para no hacer nada. Solo lo toca astra-engine.
+    private String ignoredReason;
     // Protegido por su propio monitor: lo escribe astra-engine y lo lee la UI.
     private final Deque<String> history = new ArrayDeque<>(HISTORY_SIZE);
 
@@ -51,6 +54,7 @@ public final class CommandBus {
         queue.drainTo(batch);
         int count = 0;
         for (Command command : batch) {
+            ignoredReason = null;
             try {
                 command.execute(engine);
             } catch (RuntimeException e) {
@@ -62,9 +66,24 @@ public final class CommandBus {
             }
             executed.incrementAndGet();
             count++;
-            record("#" + engine.currentTick() + " " + command.describe());
+            String entry = "#" + engine.currentTick() + " " + command.describe();
+            if (ignoredReason != null) {
+                ignored.incrementAndGet();
+                entry += " (ignored: " + ignoredReason + ")";
+            }
+            record(entry);
         }
+        ignoredReason = null;
         return count;
+    }
+
+    /**
+     * Lo llama un comando que decide no hacer nada; el motivo queda en el historial junto a su entrada.
+     *
+     * @implNote Called from the astra-engine thread, inside {@link Command#execute}.
+     */
+    public void markIgnored(String reason) {
+        ignoredReason = Objects.requireNonNull(reason, "reason");
     }
 
     /** @implNote Safe to call from any thread. Devuelve una copia, del más antiguo al más reciente. */
@@ -87,6 +106,11 @@ public final class CommandBus {
     /** @implNote Safe to call from any thread. */
     public long failedCount() {
         return failed.get();
+    }
+
+    /** Comandos ejecutados que se marcaron como ignorados. @implNote Safe to call from any thread. */
+    public long ignoredCount() {
+        return ignored.get();
     }
 
     /** @implNote Safe to call from any thread. */

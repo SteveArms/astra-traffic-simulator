@@ -174,6 +174,28 @@ public final class TrafficLight {
     }
 
     /**
+     * Pone en verde {@code axis} y reinicia el ciclo desde ahí; en pausa solo guarda la duración del verde.
+     * No toca las peticiones de emergencia pendientes.
+     *
+     * @implNote Called from astra-engine (ForceLightCmd).
+     */
+    public void force(Axis axis) {
+        Objects.requireNonNull(axis, "axis");
+        lock.lock();
+        try {
+            cancelPendingLocked();
+            var green = new GreenState(axis);
+            if (!state.get().equals(green)) {
+                state.set(green);
+                transitions.incrementAndGet();
+            }
+            scheduleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Cuando se libera el último vehículo, el ciclo normal sigue desde el amarillo del eje en emergencia.
      *
      * @implNote Called from astra-engine or astra-worker-N.

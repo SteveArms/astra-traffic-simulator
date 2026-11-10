@@ -1,7 +1,10 @@
 package com.astra.core;
 
 import com.astra.command.CommandBus;
+import com.astra.graph.RoadGraph;
+import com.astra.traffic.LightController;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -89,7 +92,7 @@ public final class SimulationEngine {
     /**
      * Avanza un tick en el hilo astra-engine y espera a que termine.
      *
-     * @implNote Called from tests or StepCmd while the engine is stopped.
+     * @implNote Called from tests while the engine is stopped (StepCmd usa SimulationControl.requestSteps).
      */
     public synchronized void step() {
         if (isRunning()) {
@@ -134,6 +137,21 @@ public final class SimulationEngine {
     /** @implNote Safe to call from any thread. */
     public SimulationControl control() {
         return control;
+    }
+
+    /** @implNote Called from the astra-engine thread (Commands). */
+    public RoadGraph graph() {
+        return world.graph();
+    }
+
+    /** @implNote Called from the astra-engine thread (Commands). */
+    public LightController lights() {
+        return world.lights();
+    }
+
+    /** Vacío si el motor se creó sin spawner. @implNote Called from the astra-engine thread (Commands). */
+    public Optional<VehicleSpawner> spawner() {
+        return world.spawner();
     }
 
     /** Ticks completados. @implNote Called from the astra-engine thread (p. ej. desde un Command). */

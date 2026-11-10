@@ -28,6 +28,7 @@ public final class LightController {
 
     private final Map<Intersection, TrafficLight> lights;
     private volatile ScheduledExecutorService executor;
+    private volatile LightMode mode = LightMode.FIXED;
 
     public LightController(RoadGraph graph, LightTimings timings) {
         this(graph, timings, () -> 1.0);
@@ -113,6 +114,16 @@ public final class LightController {
     /** @implNote Called from the thread that resumes the simulation (usually astra-engine). */
     public void resume() {
         lights.values().forEach(TrafficLight::resume);
+    }
+
+    /** @implNote Safe to call from any thread (usually astra-engine, from SetLightModeCmd). */
+    public void setMode(LightMode mode) {
+        this.mode = Objects.requireNonNull(mode, "mode");
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public LightMode mode() {
+        return mode;
     }
 
     public Optional<TrafficLight> lightAt(Intersection intersection) {

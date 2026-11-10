@@ -1,5 +1,6 @@
 package com.astra.routing;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Random;
@@ -8,7 +9,20 @@ import java.util.function.Supplier;
 /** Fábrica de estrategias por nombre ({@code SHORTEST}, {@code LEAST_CONGESTED}, {@code RANDOM}). */
 public final class RouteStrategies {
 
+    public static final List<String> NAMES =
+            List.of(ShortestDistanceStrategy.NAME, LeastCongestedStrategy.NAME, RandomRouteStrategy.NAME);
+
     private RouteStrategies() {
+    }
+
+    /** Normaliza el nombre (sin espacios, mayúsculas). @throws IllegalArgumentException si no existe */
+    public static String canonicalName(String name) {
+        Objects.requireNonNull(name, "name");
+        String canonical = name.strip().toUpperCase(Locale.ROOT);
+        if (!NAMES.contains(canonical)) {
+            throw new IllegalArgumentException("Unknown route strategy: " + name);
+        }
+        return canonical;
     }
 
     /**
