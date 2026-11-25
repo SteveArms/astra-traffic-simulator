@@ -295,7 +295,7 @@ log.file=logs/astra.log
 ## 9. Estilo de código
 
 - Java 21: usar `record`, `sealed`, `switch` con *pattern matching* y `var` local cuando aclare.
-- Identificadores, clases y commits en **inglés**; documentación y README en **español**.
+- Identificadores y clases en **inglés**; mensajes de commit, documentación y README en **español**.
 - 4 espacios de indentación, llaves estilo K&R, máximo 120 columnas.
 - Clases `final` por defecto salvo que se diseñen para herencia.
 - Campos `private final` siempre que sea posible.
@@ -320,10 +320,15 @@ log.file=logs/astra.log
 - Ramas: `main` (estable, solo merges de `release/*`), `develop` (integración).
 - Ramas de trabajo desde `develop`: `feature/<tema>`, `fix/<tema>`, `test/<tema>`,
   `docs/<tema>`, `chore/<tema>`.
-- Commits con **Conventional Commits**: `type(scope): descripción en imperativo`
+- Commits con **Conventional Commits**: `type(scope): descripción`
+  - `type` y `scope` en **inglés**; la descripción en **español**, en imperativo, sin punto final y de
+    máximo 72 caracteres.
   - types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `style`, `perf`
   - scopes: `graph`, `core`, `model`, `traffic`, `routing`, `command`, `events`,
     `distributed`, `view`, `util`, `config`, `report`
+  - Ejemplos: `feat(distributed): agrega reloj de Lamport por proceso`,
+    `test(core): añade prueba de estrés con 150 vehículos`.
+  - El cuerpo (opcional) también va en español y explica el porqué del cambio.
 - Un commit = un cambio lógico que compila y pasa los tests.
 - Merge a `develop` mediante Pull Request con `--no-ff`; borrar la rama al cerrar.
 - Release: `release/v1.0.0` → `main` + tag `v1.0.0` → merge de vuelta a `develop`.
