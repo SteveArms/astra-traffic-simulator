@@ -257,6 +257,12 @@ distributed.latencyMaxMillis=40
 distributed.seed=7
 distributed.mutex=SEMAPHORE
 distributed.grantTimeoutTicks=60
+parking.tripWeight=0.35
+parking.minStaySeconds=20
+parking.maxStaySeconds=60
+parking.searchStrategy=NEAREST_ALTERNATIVE
+parking.maxSearchAttempts=2
+parking.waitAtEntranceSeconds=8
 map.file=maps/city-3x3-v2.json
 log.file=logs/astra.log
 log.console=true
@@ -313,6 +319,12 @@ log.level=INFO
   Se cambia en vivo con `SetMutexModeCmd`.
 - `distributed.grantTimeoutTicks`: ticks que un vehículo puede tener la sección de Ricart‑Agrawala sin lograr
   entrar a la zona; al cumplirse la suelta (`cancel`) y vuelve a encolarse.
+- `parking.*` (`ParkingSettings`): con probabilidad `parking.tripWeight` (0 a 1) un auto nuevo va a estacionar a una
+  playa al azar en vez de cruzar la ciudad (buses y ambulancias siempre cruzan). Se queda un tiempo simulado
+  sorteado entre `parking.minStaySeconds` y `parking.maxStaySeconds` y sale hacia un gateway. Si la playa está
+  llena o cerrada aplica `parking.searchStrategy`: `NEAREST_ALTERNATIVE` (la playa con lugar más cercana),
+  `WAIT_AT_ENTRANCE` (espera `parking.waitAtEntranceSeconds` en la entrada y después busca otra) o `GIVE_UP` (sale
+  por el gateway más cercano). Tras `parking.maxSearchAttempts` intentos fallidos siempre se rinde.
 - `map.file`: mapa JSON relativo a `src/main/resources/com/astra/`. Cada nodo acepta `kind` (`INTERSECTION` por
   defecto, `GATEWAY`, `JUNCTION` o `PARKING`) y `capacity` (solo `PARKING`, >= 1); el mapa acepta
   `"bounds": {"width", "height"}` (si falta, se calcula con el mismo margen que el contenido). Una `PARKING` o una

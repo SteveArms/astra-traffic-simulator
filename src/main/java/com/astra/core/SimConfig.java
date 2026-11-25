@@ -1,6 +1,7 @@
 package com.astra.core;
 
 import com.astra.distributed.NetworkSettings;
+import com.astra.parking.ParkingSettings;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleSpec;
 import com.astra.model.VehicleSpecs;
@@ -23,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -34,7 +36,7 @@ import java.util.Properties;
  * Thread-safe por ser inmutable.
  */
 public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs,
-        LogSettings, NetworkSettings {
+        LogSettings, NetworkSettings, ParkingSettings {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
@@ -88,6 +90,12 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String DISTRIBUTED_SEED = "distributed.seed";
     static final String DISTRIBUTED_MUTEX = "distributed.mutex";
     static final String DISTRIBUTED_GRANT_TIMEOUT_TICKS = "distributed.grantTimeoutTicks";
+    static final String PARKING_TRIP_WEIGHT = "parking.tripWeight";
+    static final String PARKING_MIN_STAY_SECONDS = "parking.minStaySeconds";
+    static final String PARKING_MAX_STAY_SECONDS = "parking.maxStaySeconds";
+    static final String PARKING_SEARCH_STRATEGY = "parking.searchStrategy";
+    static final String PARKING_MAX_SEARCH_ATTEMPTS = "parking.maxSearchAttempts";
+    static final String PARKING_WAIT_AT_ENTRANCE_SECONDS = "parking.waitAtEntranceSeconds";
     static final String LOG_FILE = "log.file";
     static final String LOG_CONSOLE = "log.console";
     static final String LOG_LEVEL = "log.level";
@@ -143,6 +151,12 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final long DEFAULT_DISTRIBUTED_SEED = 7;
     private static final MutexMode DEFAULT_DISTRIBUTED_MUTEX = MutexMode.SEMAPHORE;
     private static final int DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS = 60;
+    private static final double DEFAULT_PARKING_TRIP_WEIGHT = 0.35;
+    private static final int DEFAULT_PARKING_MIN_STAY_SECONDS = 20;
+    private static final int DEFAULT_PARKING_MAX_STAY_SECONDS = 60;
+    private static final String DEFAULT_PARKING_SEARCH_STRATEGY = "NEAREST_ALTERNATIVE";
+    private static final int DEFAULT_PARKING_MAX_SEARCH_ATTEMPTS = 2;
+    private static final int DEFAULT_PARKING_WAIT_AT_ENTRANCE_SECONDS = 8;
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
     private static final boolean DEFAULT_LOG_CONSOLE = true;
     private static final SimLogger.Level DEFAULT_LOG_LEVEL = SimLogger.Level.INFO;
@@ -187,6 +201,12 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final long networkSeed;
     private final MutexMode mutexMode;
     private final int grantTimeoutTicks;
+    private final double parkingTripWeight;
+    private final Duration parkingMinStay;
+    private final Duration parkingMaxStay;
+    private final String parkingSearchStrategy;
+    private final int parkingMaxSearchAttempts;
+    private final Duration parkingWaitAtEntrance;
     private final String logFile;
     private final boolean logConsole;
     private final SimLogger.Level logLevel;
@@ -265,6 +285,25 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         networkSeed = positiveLong(p, DISTRIBUTED_SEED, DEFAULT_DISTRIBUTED_SEED);
         mutexMode = enumValue(p, DISTRIBUTED_MUTEX, MutexMode.class, DEFAULT_DISTRIBUTED_MUTEX);
         grantTimeoutTicks = positiveInt(p, DISTRIBUTED_GRANT_TIMEOUT_TICKS, DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS);
+        parkingTripWeight = nonNegativeDouble(p, PARKING_TRIP_WEIGHT, DEFAULT_PARKING_TRIP_WEIGHT);
+        if (parkingTripWeight > 1) {
+            throw new IllegalArgumentException("Invalid value for '" + PARKING_TRIP_WEIGHT + "': " + parkingTripWeight
+                    + " must be <= 1");
+        }
+        parkingMinStay = Duration.ofSeconds(
+                nonNegativeInt(p, PARKING_MIN_STAY_SECONDS, DEFAULT_PARKING_MIN_STAY_SECONDS));
+        parkingMaxStay = Duration.ofSeconds(
+                nonNegativeInt(p, PARKING_MAX_STAY_SECONDS, DEFAULT_PARKING_MAX_STAY_SECONDS));
+        if (parkingMaxStay.compareTo(parkingMinStay) < 0) {
+            throw new IllegalArgumentException("Invalid values for '" + PARKING_MAX_STAY_SECONDS + "': "
+                    + parkingMaxStay.toSeconds() + " must be >= " + PARKING_MIN_STAY_SECONDS + " ("
+                    + parkingMinStay.toSeconds() + ")");
+        }
+        parkingSearchStrategy = oneOf(p, PARKING_SEARCH_STRATEGY, ParkingSettings.STRATEGY_NAMES,
+                DEFAULT_PARKING_SEARCH_STRATEGY);
+        parkingMaxSearchAttempts = positiveInt(p, PARKING_MAX_SEARCH_ATTEMPTS, DEFAULT_PARKING_MAX_SEARCH_ATTEMPTS);
+        parkingWaitAtEntrance = Duration.ofSeconds(
+                nonNegativeInt(p, PARKING_WAIT_AT_ENTRANCE_SECONDS, DEFAULT_PARKING_WAIT_AT_ENTRANCE_SECONDS));
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
         logConsole = bool(p, LOG_CONSOLE, DEFAULT_LOG_CONSOLE);
         logLevel = enumValue(p, LOG_LEVEL, SimLogger.Level.class, DEFAULT_LOG_LEVEL);
@@ -465,6 +504,36 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     }
 
     @Override
+    public double parkingTripWeight() {
+        return parkingTripWeight;
+    }
+
+    @Override
+    public Duration parkingMinStay() {
+        return parkingMinStay;
+    }
+
+    @Override
+    public Duration parkingMaxStay() {
+        return parkingMaxStay;
+    }
+
+    @Override
+    public String parkingSearchStrategy() {
+        return parkingSearchStrategy;
+    }
+
+    @Override
+    public int parkingMaxSearchAttempts() {
+        return parkingMaxSearchAttempts;
+    }
+
+    @Override
+    public Duration parkingWaitAtEntrance() {
+        return parkingWaitAtEntrance;
+    }
+
+    @Override
     public String logFile() {
         return logFile;
     }
@@ -587,6 +656,19 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
             throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw
                     + "' must be one of " + Arrays.toString(type.getEnumConstants()), e);
         }
+    }
+
+    private static String oneOf(Properties p, String key, List<String> allowed, String defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        String value = raw.strip().toUpperCase(Locale.ROOT);
+        if (!allowed.contains(value)) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw + "' must be one of "
+                    + allowed);
+        }
+        return value;
     }
 
     private static String nonBlank(Properties p, String key, String defaultValue) {
