@@ -34,11 +34,12 @@ estructura, concurrencia, patrones, estilo, Git) están en **AGENTS.md** y se im
 
 ## Git (para Claude)
 
-- Trabaja siempre en la rama `feature/*`, `fix/*`, `test/*`, `docs/*` o `chore/*` indicada;
-  nunca hagas commit directo en `main` ni en `develop`.
-- Mensajes en inglés con Conventional Commits: `feat(traffic): add SmartAdaptiveState`.
-- Haz commit solo cuando el usuario lo pida, y `push` solo si lo pide explícitamente.
-- No reescribas historia publicada (`push --force`) sin permiso.
+- Trabaja solo en la rama actual; nunca cambies de rama ni hagas commit en `main` o `develop`.
+- Puedes hacer `git add` y `git commit`: Conventional Commits (tipo y scope en inglés, descripción en
+  español), un cambio lógico por commit y que cada uno compile.
+- PROHIBIDO: `git push`, abrir PR, `git pull`, `git merge`, `git rebase`, `--force` y `--amend` sobre
+  commits que no sean de la tarea actual. El push y los PR los hace el usuario.
+- Al terminar, muestra `git log --oneline develop..HEAD` y `git status`.
 
 ## Errores frecuentes a evitar
 

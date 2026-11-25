@@ -1,5 +1,6 @@
 package com.astra.core;
 
+import com.astra.distributed.NetworkSettings;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleSpec;
 import com.astra.model.VehicleSpecs;
@@ -9,6 +10,8 @@ import com.astra.routing.RoutingSettings;
 import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightTimings;
 import com.astra.traffic.SmartTimings;
+import com.astra.util.LogSettings;
+import com.astra.util.SimLogger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -16,6 +19,7 @@ import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -29,7 +33,8 @@ import java.util.Properties;
  * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
  * Thread-safe por ser inmutable.
  */
-public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs {
+public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs,
+        LogSettings, NetworkSettings {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
@@ -78,7 +83,14 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String ROUTING_WEIGHT_LEAST_CONGESTED = "routing.weight.leastCongested";
     static final String ROUTING_WEIGHT_RANDOM = "routing.weight.random";
     static final String MAP_FILE = "map.file";
+    static final String DISTRIBUTED_LATENCY_MIN_MILLIS = "distributed.latencyMinMillis";
+    static final String DISTRIBUTED_LATENCY_MAX_MILLIS = "distributed.latencyMaxMillis";
+    static final String DISTRIBUTED_SEED = "distributed.seed";
+    static final String DISTRIBUTED_MUTEX = "distributed.mutex";
+    static final String DISTRIBUTED_GRANT_TIMEOUT_TICKS = "distributed.grantTimeoutTicks";
     static final String LOG_FILE = "log.file";
+    static final String LOG_CONSOLE = "log.console";
+    static final String LOG_LEVEL = "log.level";
 
     // Deben coincidir con config.properties.
     private static final long DEFAULT_TICK_MILLIS = 50;
@@ -126,7 +138,14 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final double DEFAULT_ROUTING_WEIGHT_LEAST_CONGESTED = 0.3;
     private static final double DEFAULT_ROUTING_WEIGHT_RANDOM = 0.2;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
+    private static final int DEFAULT_DISTRIBUTED_LATENCY_MIN_MILLIS = 5;
+    private static final int DEFAULT_DISTRIBUTED_LATENCY_MAX_MILLIS = 40;
+    private static final long DEFAULT_DISTRIBUTED_SEED = 7;
+    private static final MutexMode DEFAULT_DISTRIBUTED_MUTEX = MutexMode.SEMAPHORE;
+    private static final int DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS = 60;
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
+    private static final boolean DEFAULT_LOG_CONSOLE = true;
+    private static final SimLogger.Level DEFAULT_LOG_LEVEL = SimLogger.Level.INFO;
 
     private final Duration tickMillis;
     private final boolean engineParallel;
@@ -163,7 +182,14 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final Map<VehicleKind, Double> spawnWeights;
     private final Map<String, Double> routingWeights;
     private final String mapFile;
+    private final Duration latencyMin;
+    private final Duration latencyMax;
+    private final long networkSeed;
+    private final MutexMode mutexMode;
+    private final int grantTimeoutTicks;
     private final String logFile;
+    private final boolean logConsole;
+    private final SimLogger.Level logLevel;
 
     private SimConfig(Properties p) {
         tickMillis = Duration.ofMillis(positiveLong(p, TICK_MILLIS, DEFAULT_TICK_MILLIS));
@@ -227,7 +253,21 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
                 nonNegativeDouble(p, ROUTING_WEIGHT_RANDOM, DEFAULT_ROUTING_WEIGHT_RANDOM));
         routingWeights = Collections.unmodifiableMap(requireSomeWeight(strategies, "routing.weight.*"));
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
+        latencyMin = Duration.ofMillis(
+                nonNegativeInt(p, DISTRIBUTED_LATENCY_MIN_MILLIS, DEFAULT_DISTRIBUTED_LATENCY_MIN_MILLIS));
+        latencyMax = Duration.ofMillis(
+                nonNegativeInt(p, DISTRIBUTED_LATENCY_MAX_MILLIS, DEFAULT_DISTRIBUTED_LATENCY_MAX_MILLIS));
+        if (latencyMax.compareTo(latencyMin) < 0) {
+            throw new IllegalArgumentException("Invalid values for '" + DISTRIBUTED_LATENCY_MAX_MILLIS + "': "
+                    + latencyMax.toMillis() + " must be >= " + DISTRIBUTED_LATENCY_MIN_MILLIS + " ("
+                    + latencyMin.toMillis() + ")");
+        }
+        networkSeed = positiveLong(p, DISTRIBUTED_SEED, DEFAULT_DISTRIBUTED_SEED);
+        mutexMode = enumValue(p, DISTRIBUTED_MUTEX, MutexMode.class, DEFAULT_DISTRIBUTED_MUTEX);
+        grantTimeoutTicks = positiveInt(p, DISTRIBUTED_GRANT_TIMEOUT_TICKS, DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS);
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
+        logConsole = bool(p, LOG_CONSOLE, DEFAULT_LOG_CONSOLE);
+        logLevel = enumValue(p, LOG_LEVEL, SimLogger.Level.class, DEFAULT_LOG_LEVEL);
     }
 
     public static SimConfig load() {
@@ -399,8 +439,44 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         return mapFile;
     }
 
+    @Override
+    public Duration latencyMin() {
+        return latencyMin;
+    }
+
+    @Override
+    public Duration latencyMax() {
+        return latencyMax;
+    }
+
+    @Override
+    public long networkSeed() {
+        return networkSeed;
+    }
+
+    /** Modo de exclusión mutua de las intersecciones al arrancar. */
+    public MutexMode mutexMode() {
+        return mutexMode;
+    }
+
+    /** Ticks que un vehículo puede tener la sección de Ricart-Agrawala sin lograr cruzar antes de soltarla. */
+    public int grantTimeoutTicks() {
+        return grantTimeoutTicks;
+    }
+
+    @Override
     public String logFile() {
         return logFile;
+    }
+
+    @Override
+    public boolean logConsole() {
+        return logConsole;
+    }
+
+    @Override
+    public SimLogger.Level logLevel() {
+        return logLevel;
     }
 
     private static double positiveDouble(Properties p, String key, double defaultValue) {
@@ -498,6 +574,19 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
             throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " is too large");
         }
         return (int) value;
+    }
+
+    private static <T extends Enum<T>> T enumValue(Properties p, String key, Class<T> type, T defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        try {
+            return Enum.valueOf(type, raw.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw
+                    + "' must be one of " + Arrays.toString(type.getEnumConstants()), e);
+        }
     }
 
     private static String nonBlank(Properties p, String key, String defaultValue) {

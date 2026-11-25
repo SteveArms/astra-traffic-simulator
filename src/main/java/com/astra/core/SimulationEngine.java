@@ -3,6 +3,7 @@ package com.astra.core;
 import com.astra.command.CommandBus;
 import com.astra.graph.RoadGraph;
 import com.astra.traffic.LightController;
+import com.astra.util.SimLogger;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -149,6 +150,26 @@ public final class SimulationEngine {
         return world.lights();
     }
 
+    /**
+     * Cambia el modo de exclusión mutua de las intersecciones; ver {@link WorldState#setMutexMode}.
+     *
+     * @return {@code false} si ya estaba en ese modo
+     * @implNote Called from the astra-engine thread (Commands).
+     */
+    public boolean setMutexMode(MutexMode mode) {
+        return world.setMutexMode(mode);
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public MutexMode mutexMode() {
+        return world.mutexMode();
+    }
+
+    /** {@code true} si el mundo tiene mutex de Ricart-Agrawala. @implNote Safe to call from any thread. */
+    public boolean hasDistributedLayer() {
+        return !world.mutexes().isEmpty();
+    }
+
     /** Vacío si el motor se creó sin spawner. @implNote Called from the astra-engine thread (Commands). */
     public Optional<VehicleSpawner> spawner() {
         return world.spawner();
@@ -179,9 +200,9 @@ public final class SimulationEngine {
                 // stop() interrumpió el tick a mitad de una fase: no es un fallo.
                 return;
             }
-            // TODO: SimLogger (Día 6).
-            System.err.println("[" + THREAD_NAME + "] tick " + tick + " failed: " + t);
-            t.printStackTrace();
+            StackTraceElement[] trace = t.getStackTrace();
+            String where = trace.length > 0 ? " at " + trace[0] : "";
+            SimLogger.error(SimLogger.Category.ENGINE, "tick " + tick + " failed: " + t + where);
         }
     }
 

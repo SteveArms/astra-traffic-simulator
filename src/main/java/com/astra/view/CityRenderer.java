@@ -3,6 +3,8 @@ package com.astra.view;
 import com.astra.command.CommandBus;
 import com.astra.command.Commands;
 import com.astra.core.LightView;
+import com.astra.core.MutexMode;
+import com.astra.core.MutexView;
 import com.astra.core.WorldSnapshot;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
@@ -29,6 +31,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.ArcType;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -36,7 +39,8 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 
 /**
- * Capa estática (calles) y capa dinámica (semáforos, colas, vehículos y HUD) dibujada desde el último snapshot.
+ * Capa estática (calles) y capa dinámica (semáforos, colas, candados de Ricart-Agrawala, vehículos y HUD) dibujada
+ * desde el último snapshot.
  * Clic selecciona un semáforo; clic derecho abre "Forzar verde", que solo envía un comando al bus.
  *
  * @implNote Called from the FX Application Thread.
@@ -70,6 +74,15 @@ public final class CityRenderer extends StackPane {
     private static final double SELECTION_GAP = 3;
     private static final double SELECTION_WIDTH = 2;
     private static final Font QUEUE_FONT = Font.font("System", 12);
+    // Candado de Ricart-Agrawala en la esquina superior izquierda: contorno = libre, relleno = alguien la tiene.
+    private static final double LOCK_BODY_WIDTH = 10;
+    private static final double LOCK_BODY_HEIGHT = 8;
+    private static final double LOCK_BODY_RADIUS = 2;
+    private static final double LOCK_SHACKLE_WIDTH = 6;
+    private static final double LOCK_SHACKLE_HEIGHT = 8;
+    private static final double LOCK_STROKE = 1.5;
+    private static final double HALF_TURN = 180;
+    private static final Font LOCK_FONT = Font.font("System", FontWeight.BOLD, 12);
     private static final Font PAUSE_FONT = Font.font("System", FontWeight.BOLD, 28);
 
     private static final Font HUD_FONT = Font.font("Monospaced", 13);
@@ -108,6 +121,7 @@ public final class CityRenderer extends StackPane {
     private final CommandBus bus;
     private final ContextMenu lightMenu = new ContextMenu();
     private final Map<String, Set<Side>> approaches;
+    private final Map<String, Intersection> intersections = new HashMap<>();
     private final Canvas staticLayer = new Canvas();
     private final Canvas dynamicLayer = new Canvas();
     private final AnimationTimer timer;
@@ -126,6 +140,7 @@ public final class CityRenderer extends StackPane {
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
         this.bus = Objects.requireNonNull(bus, "bus");
         this.approaches = approachesOf(graph);
+        graph.vertices().forEach(i -> intersections.put(i.id(), i));
         setOnMouseClicked(this::onClick);
         setOnContextMenuRequested(this::onContextMenu);
 
@@ -285,6 +300,11 @@ public final class CityRenderer extends StackPane {
                 drawSelection(gc, light);
             }
         }
+        if (snapshot.mutexMode() == MutexMode.RICART_AGRAWALA) {
+            for (MutexView mutex : snapshot.mutexes()) {
+                drawLock(gc, mutex);
+            }
+        }
         boolean stripeOn = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / AMBULANCE_BLINK_MILLIS) % 2 == 0;
         for (VehicleView vehicle : snapshot.vehicles()) {
             drawVehicle(gc, vehicle, stripeOn);
@@ -305,6 +325,35 @@ public final class CityRenderer extends StackPane {
         gc.setTextBaseline(VPos.BOTTOM);
         gc.fillText("↕%d ↔%d".formatted(light.queueNs(), light.queueEw()),
                 light.x() + half + LABEL_GAP, light.y() - half - LABEL_GAP);
+    }
+
+    // Candado fuera de la esquina superior izquierda y, a su izquierda, el vehículo que tiene la sección.
+    private void drawLock(GraphicsContext gc, MutexView mutex) {
+        Intersection at = intersections.get(mutex.intersectionId());
+        if (at == null) {
+            return;
+        }
+        double half = INTERSECTION_SIZE / 2;
+        double right = at.x() - half - LABEL_GAP;
+        double bottom = at.y() - half - LABEL_GAP;
+        double left = right - LOCK_BODY_WIDTH;
+        double bodyTop = bottom - LOCK_BODY_HEIGHT;
+        Color color = mutex.held() ? HUD_TEXT : LABEL_TEXT;
+        gc.setStroke(color);
+        gc.setFill(color);
+        gc.setLineWidth(LOCK_STROKE);
+        double shackleLeft = left + (LOCK_BODY_WIDTH - LOCK_SHACKLE_WIDTH) / 2;
+        gc.strokeArc(shackleLeft, bodyTop - LOCK_SHACKLE_HEIGHT / 2, LOCK_SHACKLE_WIDTH, LOCK_SHACKLE_HEIGHT,
+                0, HALF_TURN, ArcType.OPEN);
+        if (mutex.held()) {
+            gc.fillRoundRect(left, bodyTop, LOCK_BODY_WIDTH, LOCK_BODY_HEIGHT, LOCK_BODY_RADIUS, LOCK_BODY_RADIUS);
+            gc.setFont(LOCK_FONT);
+            gc.setTextAlign(TextAlignment.RIGHT);
+            gc.setTextBaseline(VPos.BOTTOM);
+            gc.fillText(mutex.holder(), left - LABEL_GAP, bottom);
+        } else {
+            gc.strokeRoundRect(left, bodyTop, LOCK_BODY_WIDTH, LOCK_BODY_HEIGHT, LOCK_BODY_RADIUS, LOCK_BODY_RADIUS);
+        }
     }
 
     private void drawSelection(GraphicsContext gc, LightView light) {

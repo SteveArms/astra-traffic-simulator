@@ -1,11 +1,13 @@
 package com.astra.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleSpec;
+import com.astra.util.SimLogger;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +54,14 @@ class SimConfigTest {
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals(Duration.ofMillis(5), config.latencyMin());
+        assertEquals(Duration.ofMillis(40), config.latencyMax());
+        assertEquals(7, config.networkSeed());
+        assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
+        assertEquals(60, config.grantTimeoutTicks());
         assertEquals("logs/astra.log", config.logFile());
+        assertTrue(config.logConsole());
+        assertEquals(SimLogger.Level.INFO, config.logLevel());
     }
 
     @Test
@@ -91,7 +100,14 @@ class SimConfigTest {
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals(Duration.ofMillis(5), config.latencyMin());
+        assertEquals(Duration.ofMillis(40), config.latencyMax());
+        assertEquals(7, config.networkSeed());
+        assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
+        assertEquals(60, config.grantTimeoutTicks());
         assertEquals("logs/astra.log", config.logFile());
+        assertTrue(config.logConsole());
+        assertEquals(SimLogger.Level.INFO, config.logLevel());
     }
 
     @Test
@@ -246,6 +262,94 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(SimConfig.ENGINE_PARALLEL), e.getMessage());
+    }
+
+    @Test
+    void latencyKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, "0");
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS, "0");
+        props.setProperty(SimConfig.DISTRIBUTED_SEED, "99");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(Duration.ZERO, config.latencyMin());
+        assertEquals(Duration.ZERO, config.latencyMax());
+        assertEquals(99, config.networkSeed());
+    }
+
+    @Test
+    void latencyMaxBelowMinThrowsWithKeyName() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, "50");
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS, "10");
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "abc", ""})
+    void invalidLatencyMinThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS), e.getMessage());
+    }
+
+    @Test
+    void mutexKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_MUTEX, "ricart_agrawala");
+        props.setProperty(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS, "10");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(MutexMode.RICART_AGRAWALA, config.mutexMode());
+        assertEquals(10, config.grantTimeoutTicks());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"LAMPORT", "semaforo", ""})
+    void invalidMutexModeThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_MUTEX, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_MUTEX), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-5", "x"})
+    void invalidGrantTimeoutThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS), e.getMessage());
+    }
+
+    @Test
+    void logKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.LOG_CONSOLE, "false");
+        props.setProperty(SimConfig.LOG_LEVEL, "debug");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertFalse(config.logConsole());
+        assertEquals(SimLogger.Level.DEBUG, config.logLevel());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TRACE", "verbose", ""})
+    void invalidLogLevelThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.LOG_LEVEL, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.LOG_LEVEL), e.getMessage());
     }
 
     private static void assertSpecs(SimConfig config) {

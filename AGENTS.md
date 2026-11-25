@@ -81,7 +81,8 @@ astra-traffic-simulator/
     │       ├── command/      Command, CommandBus, PauseCmd, ResumeCmd, StepCmd,
     │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd
     │       ├── events/       SimEvent, EventQueue
-    │       ├── distributed/  LamportClock, Request, RicartAgrawala
+    │       ├── distributed/  LamportClock, Request, Message, SimulatedNetwork,
+    │       │                 RicartAgrawalaNode, IntersectionMutex
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel
     │       └── util/         MapLoader, SimLogger
     ├── main/resources/com/astra/
@@ -109,6 +110,8 @@ Reglas de dependencia entre paquetes:
 | `astra-engine` | Bucle de simulación (tick fijo, por defecto 50 ms) | `WorldState` (dueño exclusivo) |
 | `astra-worker-N` (pool) | Actualizar vehículos en paralelo dentro de un tick | Su vehículo + `Semaphore` de intersección |
 | `astra-lights` (`ScheduledExecutorService`) | Transiciones de los semáforos | Estado propio del `TrafficLight` |
+| `astra-net` (`ScheduledExecutorService`, 1 hilo) | Entregar los mensajes de `SimulatedNetwork` | Lo que toque cada `MessageHandler` (corren todos aquí) |
+| `astra-logger` | Escribir en consola y archivo las líneas de `SimLogger` | Su cola y el archivo de log |
 
 Reglas:
 
@@ -122,8 +125,8 @@ Reglas:
 5. Las zonas de conflicto de cada intersección se protegen con `Semaphore` y **`tryAcquire`**
    (nunca `acquire` bloqueante dentro de un tick → evita congelar el motor y deadlocks).
 6. Fin de tick sincronizado con `Phaser` / `invokeAll`; ningún worker sobrevive al tick.
-7. La pausa usa `PauseGate` (`ReentrantLock` + `Condition`) y la respetan **motor y
-   semáforos**.
+7. La pausa usa `PauseGate` (`ReentrantLock` + `Condition`) y la respetan **motor,
+   semáforos y red simulada** (los mensajes que llegan en pausa se retienen hasta reanudar).
 8. Todos los hilos son *daemon* o se detienen en `AstraApp.stop()` (`shutdownNow` +
    `awaitTermination`). Nombrar los hilos (`astra-engine`, `astra-lights-1`, …).
 9. Colecciones compartidas: `ConcurrentHashMap`, `PriorityBlockingQueue`,
@@ -184,12 +187,17 @@ public class Dijkstra<V, E extends Edge<V>> {
 
 ## 7. Capa distribuida
 
-- `LamportClock.tick(process, action)` → incremento atómico; log `[LAMPORT N] PROCESS -> ACTION`.
-- `RicartAgrawala` mantiene una `PriorityQueue<Request>` ordenada por `(timestamp, processId)`.
-  Log: `[RICART] CAR-42 requested access at 17`, `ENTERED critical section`,
-  `released critical section`.
-- Cada intersección es un "proceso"; los vehículos de carriles en conflicto solicitan acceso a
-  la zona central siguiendo Ricart‑Agrawala.
+- `LamportClock` es un reloj **por proceso**: `tick(action)`, `send(action)` y `receive(remoteTs, action)`
+  (`max(clock, remoteTs) + 1`), atómicos con un `ReentrantLock`; log `[LAMPORT N] PROCESS -> ACTION`.
+- Los procesos se comunican **solo por mensajes** (`Message` REQUEST/REPLY) a través de `SimulatedNetwork`,
+  con latencia aleatoria y sin orden FIFO. Todos los handlers corren en el hilo `astra-net`.
+- `RicartAgrawalaNode` implementa Ricart‑Agrawala (1981) sin estado compartido: pide la sección con un REQUEST
+  a cada par y entra al recibir los N−1 REPLY; difiere su respuesta si está dentro (HELD) o si su propio
+  pedido es anterior según `Request` (`(timestamp, processId)`). Cada entrada cuesta 2(N−1) mensajes.
+  Log: `[RICART] <proc> requested access at 17`, `ENTERED critical section`, `released critical section`.
+- `IntersectionMutex`: un grupo RA por intersección; cada **vía entrante** es un proceso
+  (`"<intersectionId>/<roadId>"`) con una cola FIFO de vehículos, y solo el primero compite por la zona central.
+  API no bloqueante para el motor: `enqueue`, `isGranted`, `release`, `cancel`.
 - El formato de logs debe mantenerse estable: se usa como evidencia en el informe.
 
 ---
@@ -243,8 +251,15 @@ routing.weight.leastCongested=0.3
 routing.weight.random=0.2
 emergency.preemptDistance=80
 emergency.maxSeconds=30
+distributed.latencyMinMillis=5
+distributed.latencyMaxMillis=40
+distributed.seed=7
+distributed.mutex=SEMAPHORE
+distributed.grantTimeoutTicks=60
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
+log.console=true
+log.level=INFO
 ```
 
 - `engine.parallel`: con `true`, las fases PLAN y MOVE de cada tick corren en `ParallelUpdater`
@@ -289,13 +304,24 @@ log.file=logs/astra.log
   tick siguiente con otro origen y destino. `spawn.seed` lo hace reproducible.
 - `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
   (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
+- `distributed.*` (`SimulatedNetwork`): cada mensaje entre procesos tarda un retardo sorteado entre
+  `distributed.latencyMinMillis` (>= 0) y `distributed.latencyMaxMillis` (>= el mínimo), ambos en ms e incluidos.
+  `distributed.seed` hace reproducible el sorteo.
+- `distributed.mutex`: cómo se reserva la zona central de cada intersección al arrancar. `SEMAPHORE` usa solo
+  el `Semaphore` de capacidad (Día 5); `RICART_AGRAWALA` exige además la sección crítica de `IntersectionMutex`.
+  Se cambia en vivo con `SetMutexModeCmd`.
+- `distributed.grantTimeoutTicks`: ticks que un vehículo puede tener la sección de Ricart‑Agrawala sin lograr
+  entrar a la zona; al cumplirse la suelta (`cancel`) y vuelve a encolarse.
+- `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
+  ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
+  escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.
 
 ---
 
 ## 9. Estilo de código
 
 - Java 21: usar `record`, `sealed`, `switch` con *pattern matching* y `var` local cuando aclare.
-- Identificadores, clases y commits en **inglés**; documentación y README en **español**.
+- Identificadores y clases en **inglés**; mensajes de commit, documentación y README en **español**.
 - 4 espacios de indentación, llaves estilo K&R, máximo 120 columnas.
 - Clases `final` por defecto salvo que se diseñen para herencia.
 - Campos `private final` siempre que sea posible.
@@ -320,10 +346,15 @@ log.file=logs/astra.log
 - Ramas: `main` (estable, solo merges de `release/*`), `develop` (integración).
 - Ramas de trabajo desde `develop`: `feature/<tema>`, `fix/<tema>`, `test/<tema>`,
   `docs/<tema>`, `chore/<tema>`.
-- Commits con **Conventional Commits**: `type(scope): descripción en imperativo`
+- Commits con **Conventional Commits**: `type(scope): descripción`
+  - `type` y `scope` en **inglés**; la descripción en **español**, en imperativo, sin punto final y de
+    máximo 72 caracteres.
   - types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `style`, `perf`
   - scopes: `graph`, `core`, `model`, `traffic`, `routing`, `command`, `events`,
     `distributed`, `view`, `util`, `config`, `report`
+  - Ejemplos: `feat(distributed): agrega reloj de Lamport por proceso`,
+    `test(core): añade prueba de estrés con 150 vehículos`.
+  - El cuerpo (opcional) también va en español y explica el porqué del cambio.
 - Un commit = un cambio lógico que compila y pasa los tests.
 - Merge a `develop` mediante Pull Request con `--no-ff`; borrar la rama al cerrar.
 - Release: `release/v1.0.0` → `main` + tag `v1.0.0` → merge de vuelta a `develop`.

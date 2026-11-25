@@ -1,5 +1,6 @@
 package com.astra.command;
 
+import com.astra.core.MutexMode;
 import com.astra.model.VehicleKind;
 import com.astra.traffic.Axis;
 import com.astra.traffic.LightMode;
@@ -49,5 +50,9 @@ public final class Commands {
 
     public static Command lightMode(LightMode mode) {
         return new SetLightModeCmd(mode);
+    }
+
+    public static Command mutexMode(MutexMode mode) {
+        return new SetMutexModeCmd(mode);
     }
 }

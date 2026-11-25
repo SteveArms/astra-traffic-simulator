@@ -1,6 +1,7 @@
 package com.astra.traffic;
 
 import com.astra.graph.Intersection;
+import com.astra.util.SimLogger;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -238,15 +239,17 @@ public final class TrafficLight {
             pending.set(null);
             try {
                 LightState current = state.get();
-                state.set(adapt(current.next()));
+                LightState next = adapt(current.next());
+                state.set(next);
                 transitions.incrementAndGet();
+                SimLogger.log(SimLogger.Category.LIGHT, SimLogger.Level.DEBUG,
+                        intersection.id() + " " + current.name() + " -> " + next.name());
                 if (current instanceof EmergencyState) {
                     // Venció el límite de seguridad: las peticiones pendientes ya no cuentan.
                     preemptors.clear();
                 }
             } catch (RuntimeException e) {
-                // TODO: SimLogger (Día 6).
-                System.err.println("[astra-lights] " + intersection.id() + " transition failed: " + e);
+                SimLogger.error(SimLogger.Category.LIGHT, intersection.id() + " transition failed: " + e);
             }
             scheduleLocked();
         } finally {
