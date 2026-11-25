@@ -49,7 +49,7 @@ class SmartVsFixedIntegrationTest {
         props.setProperty(SimConfig.ENGINE_PARALLEL, "false");
         props.setProperty(SimConfig.SPAWN_SEED, Long.toString(seed));
         var cfg = SimConfig.from(props);
-        RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+        RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
         var lights = new LightController(graph, cfg, cfg, () -> 1.0);
         lights.setMode(mode);
         var world = new WorldState(graph, cfg, lights, new IntersectionZones(graph, cfg));

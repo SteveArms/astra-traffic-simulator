@@ -118,7 +118,7 @@ class SimStatsTest {
     @Timeout(60)
     void headlessRunMatchesSpawnerCounts() {
         var cfg = SimConfig.from(new Properties());
-        RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+        RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
         var world = new WorldState(graph, cfg, new LightController(graph, cfg), new IntersectionZones(graph, cfg));
         var spawner = new VehicleSpawner(world, cfg);
         var engine = new SimulationEngine(cfg, world, spawner);

@@ -137,7 +137,7 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final double DEFAULT_ROUTING_WEIGHT_SHORTEST = 0.5;
     private static final double DEFAULT_ROUTING_WEIGHT_LEAST_CONGESTED = 0.3;
     private static final double DEFAULT_ROUTING_WEIGHT_RANDOM = 0.2;
-    private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
+    private static final String DEFAULT_MAP_FILE = "maps/city-3x3-v2.json";
     private static final int DEFAULT_DISTRIBUTED_LATENCY_MIN_MILLIS = 5;
     private static final int DEFAULT_DISTRIBUTED_LATENCY_MAX_MILLIS = 40;
     private static final long DEFAULT_DISTRIBUTED_SEED = 7;

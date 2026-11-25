@@ -40,7 +40,7 @@ class VehicleSpawnerTest {
         private final LightController lights;
 
         Run(SimConfig cfg) {
-            RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+            RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
             lights = new LightController(graph, cfg);
             world = new WorldState(graph, cfg, lights, new IntersectionZones(graph, cfg));
             spawner = new VehicleSpawner(world, cfg);

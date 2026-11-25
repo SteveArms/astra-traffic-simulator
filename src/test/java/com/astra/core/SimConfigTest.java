@@ -53,7 +53,7 @@ class SimConfigTest {
         assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
-        assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals("maps/city-3x3-v2.json", config.mapFile());
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());
@@ -99,7 +99,7 @@ class SimConfigTest {
         assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
-        assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals("maps/city-3x3-v2.json", config.mapFile());
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());

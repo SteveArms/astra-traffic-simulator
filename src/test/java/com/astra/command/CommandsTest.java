@@ -48,7 +48,7 @@ class CommandsTest {
         // Sin generación automática: solo existen los vehículos que piden los comandos.
         props.setProperty("spawn.intervalMillis", "3600000");
         var cfg = SimConfig.from(props);
-        RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+        RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
         lights = new LightController(graph, cfg);
         var world = new WorldState(graph, cfg, lights, new IntersectionZones(graph, cfg));
         bus = new CommandBus();
@@ -179,7 +179,7 @@ class CommandsTest {
     @Test
     void mutexModeSwitchesAndCancelsPendingRequests() {
         var cfg = SimConfig.from(new Properties());
-        RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+        RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
         var network = new SimulatedNetwork(cfg);
         network.start();
         var world = new WorldState(graph, cfg, new LightController(graph, cfg), new IntersectionZones(graph, cfg),
