@@ -10,7 +10,13 @@ import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.graph.algo.Dijkstra;
 import java.io.StringReader;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class MapLoaderTest {
@@ -25,6 +31,19 @@ class MapLoaderTest {
                        {"id": "R2", "from": "A", "to": "P", "speedLimit": 10, "lanes": 1, "twoWay": true}]}
             """;
 
+    private static Set<Intersection> reachableFrom(RoadGraph graph, Intersection start) {
+        Set<Intersection> seen = new HashSet<>(Set.of(start));
+        Deque<Intersection> pending = new ArrayDeque<>(List.of(start));
+        while (!pending.isEmpty()) {
+            for (Road road : graph.outgoing(pending.poll())) {
+                if (seen.add(road.to())) {
+                    pending.add(road.to());
+                }
+            }
+        }
+        return seen;
+    }
+
     private static MapLoader.LoadedMap parse(String json) {
         return MapLoader.parse(new StringReader(json));
     }
@@ -36,6 +55,55 @@ class MapLoaderTest {
         assertEquals("City 3x3", map.name());
         assertEquals(9, map.graph().vertexCount());
         assertEquals(24, map.graph().edgeCount());
+    }
+
+    @Test
+    void v2MapHasEveryNodeKindAndBounds() {
+        MapLoader.LoadedMap map = MapLoader.load("maps/city-3x3-v2.json");
+        Map<NodeKind, Long> byKind = map.graph().vertices().stream()
+                .collect(Collectors.groupingBy(Intersection::kind, Collectors.counting()));
+
+        assertEquals("City 3x3", map.name());
+        assertEquals(new MapLoader.Bounds(1200, 900), map.bounds());
+        assertEquals(Map.of(NodeKind.INTERSECTION, 9L, NodeKind.GATEWAY, 12L, NodeKind.JUNCTION, 4L,
+                NodeKind.PARKING, 4L), byKind);
+        // 12 calles (4 partidas en dos por un JUNCTION) + 12 gateways + 4 accesos a playas, en los dos sentidos.
+        assertEquals(64, map.graph().edgeCount());
+    }
+
+    @Test
+    void v2MapPlacesNodesOnTheGrid() {
+        RoadGraph graph = MapLoader.load("maps/city-3x3-v2.json").graph();
+
+        Intersection i12 = graph.findIntersection("I12").orElseThrow();
+        assertEquals(900, i12.x(), DELTA);
+        assertEquals(450, i12.y(), DELTA);
+        assertEquals(0, graph.findIntersection("G-N1").orElseThrow().y(), DELTA);
+        assertEquals(900, graph.findIntersection("G-S1").orElseThrow().y(), DELTA);
+        assertEquals(0, graph.findIntersection("G-W2").orElseThrow().x(), DELTA);
+        assertEquals(1200, graph.findIntersection("G-E2").orElseThrow().x(), DELTA);
+        List<Integer> capacities = graph.vertices().stream().filter(Intersection::isParking)
+                .map(Intersection::capacity).sorted().toList();
+        assertEquals(List.of(6, 8, 10, 12), capacities);
+        for (Intersection parking : graph.vertices().stream().filter(Intersection::isParking).toList()) {
+            Road access = graph.outgoing(parking).get(0);
+            assertEquals(NodeKind.JUNCTION, access.to().kind(), parking.id());
+            assertEquals(70, access.length(), DELTA, parking.id());
+        }
+        assertTrue(graph.edges().stream().allMatch(r -> r.speedLimit() == 14 && r.lanes() == 1));
+    }
+
+    @Test
+    void v2MapConnectsEveryGatewayToEveryGatewayAndParking() {
+        RoadGraph graph = MapLoader.load("maps/city-3x3-v2.json").graph();
+        Set<Intersection> targets = graph.vertices().stream()
+                .filter(i -> i.isGateway() || i.isParking())
+                .collect(Collectors.toSet());
+
+        for (Intersection gateway : graph.vertices().stream().filter(Intersection::isGateway).toList()) {
+            Set<Intersection> reached = reachableFrom(graph, gateway);
+            assertTrue(reached.containsAll(targets), gateway.id() + " misses some gateway or parking");
+        }
     }
 
     @Test
