@@ -11,6 +11,7 @@ import com.astra.core.WorldState;
 import com.astra.distributed.IntersectionMutex;
 import com.astra.distributed.SimulatedNetwork;
 import com.astra.graph.Intersection;
+import com.astra.graph.NodeKind;
 import com.astra.traffic.LightController;
 import com.astra.traffic.TrafficLight;
 import com.astra.util.MapLoader;
@@ -56,8 +57,10 @@ public final class AstraApp extends Application {
         var bus = new CommandBus();
         engine = new SimulationEngine(config, world, new VehicleSpawner(world, config), bus, control);
 
+        // Solo cruces con semáforo: los gateways, JUNCTION y playas no se pueden forzar.
         List<String> lightIds = lights.lights().stream()
                 .map(TrafficLight::intersection)
+                .filter(at -> at.kind() == NodeKind.INTERSECTION)
                 .map(Intersection::id)
                 .sorted()
                 .toList();
