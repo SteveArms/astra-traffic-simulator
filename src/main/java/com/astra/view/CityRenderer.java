@@ -5,6 +5,7 @@ import com.astra.command.Commands;
 import com.astra.core.LightView;
 import com.astra.core.MutexMode;
 import com.astra.core.MutexView;
+import com.astra.core.ParkingView;
 import com.astra.core.WorldSnapshot;
 import com.astra.graph.Intersection;
 import com.astra.graph.NodeKind;
@@ -14,6 +15,7 @@ import com.astra.model.VehicleView;
 import com.astra.traffic.Axis;
 import com.astra.util.MapLoader;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -74,6 +76,8 @@ public final class CityRenderer extends StackPane {
     private static final double LOCK_STROKE = 1.2;
     private static final double HALF_TURN = 180;
     private static final double VEHICLE_LABEL_RISE = 6;
+    // Distancia (mundo) entre el fondo de una playa y su etiqueta de cajones libres.
+    private static final double PARKING_LABEL_GAP = 10;
 
     private static final Font PAUSE_FONT = Font.font("System", FontWeight.BOLD, 28);
     private static final Font HUD_FONT = Font.font("Monospaced", 12);
@@ -102,6 +106,9 @@ public final class CityRenderer extends StackPane {
     private final CommandBus bus;
     private final ContextMenu lightMenu = new ContextMenu();
     private final Map<String, Intersection> intersections = new HashMap<>();
+    // Geometría de cada playa, calculada una vez: los cajones por índice y el contorno.
+    private final Map<String, LotGeometry> lots;
+    private final Map<String, List<LotGeometry.Stall>> stalls = new HashMap<>();
     private final Canvas staticLayer = new Canvas();
     private final Canvas dynamicLayer = new Canvas();
     private final AnimationTimer timer;
@@ -122,6 +129,8 @@ public final class CityRenderer extends StackPane {
         this.bus = Objects.requireNonNull(bus, "bus");
         this.city = new CityPainter(graph, bounds);
         this.signals = new SignalPainter(graph);
+        this.lots = city.lots();
+        lots.forEach((id, lot) -> stalls.put(id, lot.stalls()));
         graph.vertices().forEach(i -> intersections.put(i.id(), i));
         measure.setFont(HUD_FONT);
         setOnMouseClicked(this::onClick);
@@ -235,6 +244,9 @@ public final class CityRenderer extends StackPane {
         for (LightView light : snapshot.lights()) {
             signals.paint(gc, light);
         }
+        for (ParkingView parking : snapshot.parkings()) {
+            drawParkedCars(gc, parking);
+        }
         boolean sirenRed = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / SIREN_MILLIS) % 2 == 0;
         for (VehicleView vehicle : snapshot.vehicles()) {
             VehiclePainter.paint(gc, vehicle, sirenRed);
@@ -254,12 +266,61 @@ public final class CityRenderer extends StackPane {
                 drawLock(gc, mutex);
             }
         }
+        for (ParkingView parking : snapshot.parkings()) {
+            drawParkingStatus(gc, parking);
+        }
         if (showLabels) {
             drawLabels(gc, snapshot);
         }
         drawHud(gc, snapshot);
         if (snapshot.paused()) {
             drawPauseOverlay(gc);
+        }
+    }
+
+    // En coordenadas del mundo: cada auto en su cajón, con el frente hacia el pasillo.
+    private void drawParkedCars(GraphicsContext gc, ParkingView parking) {
+        List<LotGeometry.Stall> lotStalls = stalls.get(parking.lotId());
+        if (lotStalls == null) {
+            return;
+        }
+        for (ParkingView.ParkedCar car : parking.cars()) {
+            if (car.slot() < lotStalls.size()) {
+                LotGeometry.Stall stall = lotStalls.get(car.slot());
+                VehiclePainter.paintParked(gc, car.vehicleId(), stall.x(), stall.y(), stall.headingRad(),
+                        car.length());
+            }
+        }
+    }
+
+    // En px: contorno naranja si está llena o cerrada y, con etiquetas, los cajones libres al fondo de la playa.
+    private void drawParkingStatus(GraphicsContext gc, ParkingView parking) {
+        LotGeometry lot = lots.get(parking.lotId());
+        if (lot == null) {
+            return;
+        }
+        if (parking.full()) {
+            double[][] outline = lot.outline();
+            double[] xs = new double[outline[0].length];
+            double[] ys = new double[outline[1].length];
+            for (int i = 0; i < xs.length; i++) {
+                xs[i] = view.toScreenX(outline[0][i]);
+                ys[i] = view.toScreenY(outline[1][i]);
+            }
+            gc.setStroke(ZONE_FULL);
+            gc.setLineWidth(FULL_BORDER_WIDTH);
+            gc.strokePolygon(xs, ys, xs.length);
+        }
+        if (showLabels) {
+            String text = parking.open()
+                    ? "%d/%d libres".formatted(parking.free(), parking.capacity())
+                    : "Cerrada";
+            double along = lot.depth() + PARKING_LABEL_GAP;
+            gc.setFont(LABEL_FONT);
+            gc.setTextAlign(TextAlignment.CENTER);
+            gc.setTextBaseline(VPos.CENTER);
+            haloText(gc, text, OVERLAY_TEXT, view.toScreenX(lot.worldX(along, 0)),
+                    view.toScreenY(lot.worldY(along, 0)));
         }
     }
 

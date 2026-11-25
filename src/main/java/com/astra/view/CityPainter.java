@@ -7,7 +7,9 @@ import com.astra.graph.RoadGraph;
 import com.astra.util.MapLoader;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.TreeSet;
 import javafx.geometry.VPos;
@@ -58,10 +60,6 @@ final class CityPainter {
     private static final double RESERVED_MARGIN = 6;
     private static final long BLOCK_SEED = 0x5EEDL;
 
-    private static final double STALL_WIDTH = 10;
-    private static final double STALL_DEPTH = 16;
-    private static final double AISLE = 14;
-    private static final double LOT_PAD = 4;
     private static final double SIGN_SIZE = 12;
     private static final double SIGN_RADIUS = 3;
     private static final double SIGN_GAP = 4;
@@ -97,11 +95,6 @@ final class CityPainter {
     private record Building(double x, double y, double width, double height, int palette) {
     }
 
-    /** Playa: {@code (dx, dy)} apunta de su entrada hacia adentro de la manzana. */
-    private record Lot(Intersection parking, Intersection junction, double dx, double dy, double depth,
-            double width, int capacity) {
-    }
-
     private record Box(double minX, double minY, double maxX, double maxY) {
         boolean overlaps(Box other) {
             return minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY;
@@ -112,7 +105,7 @@ final class CityPainter {
     private final List<Segment> streets = new ArrayList<>();
     private final List<Block> blocks = new ArrayList<>();
     private final List<Building> buildings = new ArrayList<>();
-    private final List<Lot> lots = new ArrayList<>();
+    private final List<LotGeometry> lots = new ArrayList<>();
     private final List<Intersection> crossings;
     private final List<Intersection> gateways;
     private final RoadGraph graph;
@@ -128,6 +121,13 @@ final class CityPainter {
         collectStreets();
         collectLots();
         collectBlocks();
+    }
+
+    /** Geometría de cada playa, por id. */
+    Map<String, LotGeometry> lots() {
+        Map<String, LotGeometry> byId = new HashMap<>();
+        lots.forEach(lot -> byId.put(lot.id(), lot));
+        return Map.copyOf(byId);
     }
 
     void paint(GraphicsContext gc) {
@@ -166,14 +166,7 @@ final class CityPainter {
             if (!parking.isParking()) {
                 continue;
             }
-            Intersection junction = graph.outgoing(parking).get(0).to();
-            double length = parking.distanceTo(junction);
-            double dx = (parking.x() - junction.x()) / length;
-            double dy = (parking.y() - junction.y()) / length;
-            int perSide = (parking.capacity() + 1) / 2;
-            double depth = perSide * STALL_WIDTH + 2 * LOT_PAD;
-            double width = 2 * STALL_DEPTH + AISLE;
-            lots.add(new Lot(parking, junction, dx, dy, depth, width, parking.capacity()));
+            lots.add(new LotGeometry(parking, graph.outgoing(parking).get(0).to()));
         }
     }
 
@@ -234,7 +227,7 @@ final class CityPainter {
 
     private List<Box> reservedAreas() {
         List<Box> reserved = new ArrayList<>();
-        for (Lot lot : lots) {
+        for (LotGeometry lot : lots) {
             double nx = -lot.dy();
             double ny = lot.dx();
             Intersection p = lot.parking();
@@ -315,7 +308,7 @@ final class CityPainter {
     }
 
     private void paintLots(GraphicsContext gc) {
-        for (Lot lot : lots) {
+        for (LotGeometry lot : lots) {
             Intersection p = lot.parking();
             Intersection j = lot.junction();
             double start = LANE_WIDTH - EDGE_LINE_INSET - MARK_WIDTH;
@@ -326,29 +319,28 @@ final class CityPainter {
 
             gc.save();
             gc.translate(p.x(), p.y());
-            gc.rotate(Math.toDegrees(Math.atan2(lot.dy(), lot.dx())));
+            gc.rotate(lot.angleDegrees());
             // Sistema local: x hacia adentro de la manzana, y a lo ancho de la playa.
             double half = lot.width() / 2;
             gc.setFill(ASPHALT);
             gc.fillRect(0, -half, lot.depth(), lot.width());
             gc.setStroke(WHITE_PAINT);
             gc.setLineWidth(MARK_WIDTH);
-            int sideA = (lot.capacity() + 1) / 2;
-            int sideB = lot.capacity() / 2;
-            paintStalls(gc, sideA, -half, -half + STALL_DEPTH);
-            paintStalls(gc, sideB, half - STALL_DEPTH, half);
+            paintStalls(gc, lot.sideA(), -half, -half + LotGeometry.STALL_DEPTH);
+            paintStalls(gc, lot.sideB(), half - LotGeometry.STALL_DEPTH, half);
             gc.restore();
         }
     }
 
     private static void paintStalls(GraphicsContext gc, int stalls, double y0, double y1) {
         for (int k = 0; k <= stalls; k++) {
-            double x = LOT_PAD + k * STALL_WIDTH;
+            double x = LotGeometry.LOT_PAD + k * LotGeometry.STALL_WIDTH;
             gc.strokeLine(x, y0, x, y1);
         }
         if (stalls > 0) {
             double inner = y0 < 0 ? y1 : y0;
-            gc.strokeLine(LOT_PAD, inner, LOT_PAD + stalls * STALL_WIDTH, inner);
+            double end = LotGeometry.LOT_PAD + stalls * LotGeometry.STALL_WIDTH;
+            gc.strokeLine(LotGeometry.LOT_PAD, inner, end, inner);
         }
     }
 
@@ -478,7 +470,7 @@ final class CityPainter {
         gc.setFont(SIGN_FONT);
         gc.setTextAlign(TextAlignment.CENTER);
         gc.setTextBaseline(VPos.CENTER);
-        for (Lot lot : lots) {
+        for (LotGeometry lot : lots) {
             double nx = -lot.dy();
             double ny = lot.dx();
             double offset = lot.width() / 2 + SIGN_GAP + SIGN_SIZE / 2;
