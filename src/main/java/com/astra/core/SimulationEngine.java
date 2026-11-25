@@ -3,6 +3,7 @@ package com.astra.core;
 import com.astra.command.CommandBus;
 import com.astra.graph.RoadGraph;
 import com.astra.traffic.LightController;
+import com.astra.util.SimLogger;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -179,9 +180,9 @@ public final class SimulationEngine {
                 // stop() interrumpió el tick a mitad de una fase: no es un fallo.
                 return;
             }
-            // TODO: SimLogger (Día 6).
-            System.err.println("[" + THREAD_NAME + "] tick " + tick + " failed: " + t);
-            t.printStackTrace();
+            StackTraceElement[] trace = t.getStackTrace();
+            String where = trace.length > 0 ? " at " + trace[0] : "";
+            SimLogger.error(SimLogger.Category.ENGINE, "tick " + tick + " failed: " + t + where);
         }
     }
 

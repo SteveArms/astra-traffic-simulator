@@ -12,6 +12,7 @@ import com.astra.graph.Intersection;
 import com.astra.traffic.LightController;
 import com.astra.traffic.TrafficLight;
 import com.astra.util.MapLoader;
+import com.astra.util.SimLogger;
 import com.astra.view.CityRenderer;
 import com.astra.view.ControlPanel;
 import com.astra.view.StatsPanel;
@@ -40,6 +41,7 @@ public final class AstraApp extends Application {
     @Override
     public void start(Stage stage) {
         SimConfig config = SimConfig.load();
+        SimLogger.init(config);
         MapLoader.LoadedMap map = MapLoader.load(config.mapFile());
         var control = new SimulationControl();
         lights = new LightController(map.graph(), config, config, control::speedFactor);
@@ -99,6 +101,7 @@ public final class AstraApp extends Application {
         if (lights != null) {
             lights.stop();
         }
+        SimLogger.shutdown();
     }
 
     public static void main(String[] args) {

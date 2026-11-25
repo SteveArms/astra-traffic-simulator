@@ -1,6 +1,7 @@
 package com.astra.command;
 
 import com.astra.core.SimulationEngine;
+import com.astra.util.SimLogger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -59,8 +60,7 @@ public final class CommandBus {
                 command.execute(engine);
             } catch (RuntimeException e) {
                 failed.incrementAndGet();
-                // TODO: SimLogger (Día 6).
-                System.err.println("[" + SimulationEngine.THREAD_NAME + "] command " + command.describe()
+                SimLogger.error(SimLogger.Category.CMD, "#" + engine.currentTick() + " " + command.describe()
                         + " failed: " + e);
                 continue;
             }
@@ -72,6 +72,7 @@ public final class CommandBus {
                 entry += " (ignored: " + ignoredReason + ")";
             }
             record(entry);
+            SimLogger.info(SimLogger.Category.CMD, entry);
         }
         ignoredReason = null;
         return count;
