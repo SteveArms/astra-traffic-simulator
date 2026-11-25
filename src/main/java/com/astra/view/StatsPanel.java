@@ -24,6 +24,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
@@ -61,10 +62,12 @@ public final class StatsPanel extends VBox {
         this.snapshots = Objects.requireNonNull(snapshots, "snapshots");
         getStyleClass().addAll("panel", "stats-panel");
 
+        // La etiqueta crece; el valor se alinea a la derecha y nunca baja de su ancho: no se corta.
         var keys = new ColumnConstraints();
+        keys.setHgrow(Priority.ALWAYS);
         var values = new ColumnConstraints();
         values.setHalignment(HPos.RIGHT);
-        values.setHgrow(Priority.ALWAYS);
+        values.setMinWidth(Region.USE_PREF_SIZE);
         grid.getColumnConstraints().addAll(keys, values);
         grid.getStyleClass().add("stats-grid");
         addRow("Autos", cars);
@@ -145,6 +148,7 @@ public final class StatsPanel extends VBox {
     private static Label value() {
         Label label = new Label("—");
         label.getStyleClass().add("value");
+        label.setMinWidth(Region.USE_PREF_SIZE);
         return label;
     }
 

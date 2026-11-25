@@ -33,7 +33,7 @@ public final class AstraApp extends Application {
     private static final double WINDOW_WIDTH = 1280;
     private static final double WINDOW_HEIGHT = 760;
     private static final double CONTROL_PANEL_WIDTH = 260;
-    private static final double STATS_PANEL_WIDTH = 300;
+    private static final double STATS_PANEL_WIDTH = 320;
 
     private LightController lights;
     private SimulatedNetwork network;
@@ -85,6 +85,8 @@ public final class AstraApp extends Application {
         controlPanel.installShortcuts(scene);
         stage.setTitle(TITLE.formatted(map.name()));
         stage.setScene(scene);
+        // A toda la pantalla: la ciudad se escala para llenar el espacio que dejan los paneles.
+        stage.setMaximized(true);
         stage.show();
 
         network.start();
