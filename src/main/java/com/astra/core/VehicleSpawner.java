@@ -5,7 +5,10 @@ import com.astra.graph.NodeKind;
 import com.astra.graph.Road;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleFactory;
+import com.astra.model.TripPurpose;
 import com.astra.model.VehicleKind;
+import com.astra.parking.ParkingDirectory;
+import com.astra.parking.ParkingLot;
 import com.astra.routing.RouteStrategies;
 import com.astra.routing.RouteStrategy;
 import java.util.ArrayList;
@@ -22,8 +25,9 @@ import java.util.Random;
 /**
  * Genera vehículos entre los extremos del mapa: {@code spawn.batchSize} por intervalo de tiempo simulado, sin superar
  * {@code vehicle.maxCount}. Si el mapa tiene nodos {@link NodeKind#GATEWAY}, los extremos son solo esos (entran y
- * salen de la ciudad por ellos); si no, las intersecciones del borde. No tiene hilos propios y usa una sola semilla:
- * con la misma configuración, la secuencia es siempre la misma.
+ * salen de la ciudad por ellos); si no, las intersecciones del borde. Si además tiene playas, cada auto va a estacionar
+ * con probabilidad {@code parking.tripWeight}: gateway → playa al azar → gateway de salida. No tiene hilos propios y
+ * usa una sola semilla: con la misma configuración, la secuencia es siempre la misma.
  *
  * @implNote Solo astra-engine lo usa, dentro del tick; antes de iniciar el motor puede usarse desde cualquier hilo.
  */
@@ -38,6 +42,7 @@ public final class VehicleSpawner {
     private final double intervalSeconds;
     private final int batchSize;
     private final int maxCount;
+    private final double parkTripWeight;
     private final List<Intersection> border;
     private final boolean usesGateways;
     private final Map<VehicleKind, Double> kindWeights;
@@ -55,6 +60,7 @@ public final class VehicleSpawner {
         this.intervalSeconds = cfg.spawnIntervalMillis().toMillis() / MILLIS_PER_SECOND;
         this.batchSize = cfg.spawnBatchSize();
         this.maxCount = cfg.vehicleMaxCount();
+        this.parkTripWeight = cfg.parkingTripWeight();
         this.border = endpointsOf(world.graph().vertices());
         this.usesGateways = border.stream().anyMatch(Intersection::isGateway);
         if (border.size() < 2) {
@@ -151,7 +157,26 @@ public final class VehicleSpawner {
         if (destination.equals(origin)) {
             destination = border.get(border.size() - 1);
         }
+        // Solo se sortea si hay playas: el mapa viejo conserva su secuencia de siempre.
+        List<ParkingLot> lots = world.parkingDirectory().map(ParkingDirectory::lots).orElse(List.of());
+        if (kind == VehicleKind.CAR && !lots.isEmpty() && random.nextDouble() < parkTripWeight) {
+            ParkingLot lot = lots.get(random.nextInt(lots.size()));
+            return placeParker(strategy, origin, lot.node(), destination).isPresent();
+        }
         return place(kind, strategy, origin, destination).isPresent();
+    }
+
+    // Auto que va a una playa y después sale por {@code exit}.
+    private Optional<Vehicle> placeParker(RouteStrategy strategy, Intersection origin, Intersection lot,
+            Intersection exit) {
+        List<Road> route = strategy.route(world.graph(), origin, lot);
+        if (route.isEmpty() || !hasRoom(route.get(0), cfg.specFor(VehicleKind.CAR).length())) {
+            return Optional.empty();
+        }
+        Vehicle vehicle = factory.create(VehicleKind.CAR, strategy, route, TripPurpose.PARK, exit);
+        world.addVehicle(vehicle);
+        spawnedByKind.merge(VehicleKind.CAR, 1, Integer::sum);
+        return Optional.of(vehicle);
     }
 
     private Optional<Vehicle> place(VehicleKind kind, RouteStrategy strategy, Intersection origin,

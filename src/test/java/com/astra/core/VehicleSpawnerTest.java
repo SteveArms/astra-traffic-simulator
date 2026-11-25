@@ -248,10 +248,12 @@ class VehicleSpawnerTest {
 
     private static final String V2 = "maps/city-3x3-v2.json";
 
+    // Solo viajes de paso: los que estacionan los cubre ParkingIntegrationTest.
     private static SimConfig v2Config() {
         var props = new Properties();
         props.setProperty(SimConfig.ENGINE_PARALLEL, "false");
         props.setProperty(SimConfig.SPAWN_INTERVAL_MILLIS, "500");
+        props.setProperty(SimConfig.PARKING_TRIP_WEIGHT, "0");
         return SimConfig.from(props);
     }
 
