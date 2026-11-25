@@ -11,6 +11,7 @@ import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.util.MapLoader;
 import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
 import java.util.EnumSet;
@@ -71,6 +72,8 @@ public final class CityRenderer extends StackPane {
     private static final double FULL_BORDER_WIDTH = 2;
 
     private static final double HIT_RADIUS = INTERSECTION_SIZE / 2 + 4;
+    // Margen en píxeles entre la ciudad y el borde del canvas.
+    private static final double VIEW_MARGIN = 16;
     private static final double SELECTION_GAP = 3;
     private static final double SELECTION_WIDTH = 2;
     private static final Font QUEUE_FONT = Font.font("System", 12);
@@ -117,6 +120,8 @@ public final class CityRenderer extends StackPane {
     private static final Color PAUSE_VEIL = Color.web("#030712", 0.6);
 
     private final RoadGraph graph;
+    private final MapLoader.Bounds bounds;
+    private final ViewTransform view = new ViewTransform();
     private final Supplier<WorldSnapshot> snapshotSource;
     private final CommandBus bus;
     private final ContextMenu lightMenu = new ContextMenu();
@@ -127,16 +132,16 @@ public final class CityRenderer extends StackPane {
     private final AnimationTimer timer;
     private final Text measure = new Text();
 
-    private double offsetX;
-    private double offsetY;
     private long fpsWindowStart;
     private int framesInWindow;
     private int fps;
     private String selectedId;
     private Consumer<String> onIntersectionSelected = id -> { };
 
-    public CityRenderer(RoadGraph graph, Supplier<WorldSnapshot> snapshotSource, CommandBus bus) {
+    public CityRenderer(RoadGraph graph, MapLoader.Bounds bounds, Supplier<WorldSnapshot> snapshotSource,
+            CommandBus bus) {
         this.graph = Objects.requireNonNull(graph, "graph");
+        this.bounds = Objects.requireNonNull(bounds, "bounds");
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
         this.bus = Objects.requireNonNull(bus, "bus");
         this.approaches = approachesOf(graph);
@@ -213,9 +218,12 @@ public final class CityRenderer extends StackPane {
         onIntersectionSelected.accept(id);
     }
 
+    // (x, y) en píxeles del canvas: se pasa al mundo con la transformación inversa.
     private String lightAt(double x, double y) {
+        double worldX = view.toWorldX(x);
+        double worldY = view.toWorldY(y);
         for (LightView light : snapshotSource.get().lights()) {
-            if (Math.abs(x - offsetX - light.x()) <= HIT_RADIUS && Math.abs(y - offsetY - light.y()) <= HIT_RADIUS) {
+            if (Math.abs(worldX - light.x()) <= HIT_RADIUS && Math.abs(worldY - light.y()) <= HIT_RADIUS) {
                 return light.intersectionId();
             }
         }
@@ -223,12 +231,12 @@ public final class CityRenderer extends StackPane {
     }
 
     private void drawStatic() {
-        centerMap();
+        view.fit(staticLayer.getWidth(), staticLayer.getHeight(), bounds.width(), bounds.height(), VIEW_MARGIN);
         GraphicsContext gc = staticLayer.getGraphicsContext2D();
         gc.setFill(BACKGROUND);
         gc.fillRect(0, 0, staticLayer.getWidth(), staticLayer.getHeight());
         gc.save();
-        gc.translate(offsetX, offsetY);
+        view.apply(gc);
 
         gc.setLineCap(StrokeLineCap.BUTT);
         for (Road road : graph.edges()) {
@@ -251,15 +259,6 @@ public final class CityRenderer extends StackPane {
             gc.fillText(i.id(), i.x() + half + LABEL_GAP, i.y() + half + LABEL_GAP);
         }
         gc.restore();
-    }
-
-    private void centerMap() {
-        double minX = graph.vertices().stream().mapToDouble(Intersection::x).min().orElse(0);
-        double maxX = graph.vertices().stream().mapToDouble(Intersection::x).max().orElse(0);
-        double minY = graph.vertices().stream().mapToDouble(Intersection::y).min().orElse(0);
-        double maxY = graph.vertices().stream().mapToDouble(Intersection::y).max().orElse(0);
-        offsetX = (staticLayer.getWidth() - (maxX - minX)) / 2 - minX;
-        offsetY = (staticLayer.getHeight() - (maxY - minY)) / 2 - minY;
     }
 
     private void drawRoad(GraphicsContext gc, Road road, int totalLanes, boolean twoWay) {
@@ -291,7 +290,7 @@ public final class CityRenderer extends StackPane {
         GraphicsContext gc = dynamicLayer.getGraphicsContext2D();
         gc.clearRect(0, 0, dynamicLayer.getWidth(), dynamicLayer.getHeight());
         gc.save();
-        gc.translate(offsetX, offsetY);
+        view.apply(gc);
         for (LightView light : snapshot.lights()) {
             drawZone(gc, light);
             drawLight(gc, light);

@@ -64,7 +64,7 @@ public final class AstraApp extends Application {
                 .map(Intersection::id)
                 .sorted()
                 .toList();
-        renderer = new CityRenderer(map.graph(), engine::latestSnapshot, bus);
+        renderer = new CityRenderer(map.graph(), map.bounds(), engine::latestSnapshot, bus);
         controlPanel = new ControlPanel(bus, engine::latestSnapshot, lightIds);
         statsPanel = new StatsPanel(engine::latestSnapshot);
         renderer.setOnIntersectionSelected(controlPanel::selectIntersection);
