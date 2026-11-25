@@ -9,6 +9,8 @@ import com.astra.routing.RoutingSettings;
 import com.astra.routing.ShortestDistanceStrategy;
 import com.astra.traffic.LightTimings;
 import com.astra.traffic.SmartTimings;
+import com.astra.util.LogSettings;
+import com.astra.util.SimLogger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -16,6 +18,7 @@ import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -29,7 +32,8 @@ import java.util.Properties;
  * valores inválidos lanzan {@link IllegalArgumentException} con el nombre de la clave.
  * Thread-safe por ser inmutable.
  */
-public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs {
+public final class SimConfig implements LightTimings, SmartTimings, RoutingSettings, VehicleSpecs,
+        LogSettings {
 
     public static final String RESOURCE = "/com/astra/config.properties";
 
@@ -79,6 +83,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String ROUTING_WEIGHT_RANDOM = "routing.weight.random";
     static final String MAP_FILE = "map.file";
     static final String LOG_FILE = "log.file";
+    static final String LOG_CONSOLE = "log.console";
+    static final String LOG_LEVEL = "log.level";
 
     // Deben coincidir con config.properties.
     private static final long DEFAULT_TICK_MILLIS = 50;
@@ -127,6 +133,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final double DEFAULT_ROUTING_WEIGHT_RANDOM = 0.2;
     private static final String DEFAULT_MAP_FILE = "maps/city-3x3.json";
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
+    private static final boolean DEFAULT_LOG_CONSOLE = true;
+    private static final SimLogger.Level DEFAULT_LOG_LEVEL = SimLogger.Level.INFO;
 
     private final Duration tickMillis;
     private final boolean engineParallel;
@@ -164,6 +172,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final Map<String, Double> routingWeights;
     private final String mapFile;
     private final String logFile;
+    private final boolean logConsole;
+    private final SimLogger.Level logLevel;
 
     private SimConfig(Properties p) {
         tickMillis = Duration.ofMillis(positiveLong(p, TICK_MILLIS, DEFAULT_TICK_MILLIS));
@@ -228,6 +238,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         routingWeights = Collections.unmodifiableMap(requireSomeWeight(strategies, "routing.weight.*"));
         mapFile = nonBlank(p, MAP_FILE, DEFAULT_MAP_FILE);
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
+        logConsole = bool(p, LOG_CONSOLE, DEFAULT_LOG_CONSOLE);
+        logLevel = level(p, LOG_LEVEL, DEFAULT_LOG_LEVEL);
     }
 
     public static SimConfig load() {
@@ -399,8 +411,19 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         return mapFile;
     }
 
+    @Override
     public String logFile() {
         return logFile;
+    }
+
+    @Override
+    public boolean logConsole() {
+        return logConsole;
+    }
+
+    @Override
+    public SimLogger.Level logLevel() {
+        return logLevel;
     }
 
     private static double positiveDouble(Properties p, String key, double defaultValue) {
@@ -498,6 +521,19 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
             throw new IllegalArgumentException("Invalid value for '" + key + "': " + value + " is too large");
         }
         return (int) value;
+    }
+
+    private static SimLogger.Level level(Properties p, String key, SimLogger.Level defaultValue) {
+        String raw = p.getProperty(key);
+        if (raw == null) {
+            return defaultValue;
+        }
+        try {
+            return SimLogger.Level.valueOf(raw.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw
+                    + "' must be one of " + Arrays.toString(SimLogger.Level.values()), e);
+        }
     }
 
     private static String nonBlank(Properties p, String key, String defaultValue) {

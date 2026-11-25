@@ -245,6 +245,8 @@ emergency.preemptDistance=80
 emergency.maxSeconds=30
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
+log.console=true
+log.level=INFO
 ```
 
 - `engine.parallel`: con `true`, las fases PLAN y MOVE de cada tick corren en `ParallelUpdater`
@@ -289,6 +291,9 @@ log.file=logs/astra.log
   tick siguiente con otro origen y destino. `spawn.seed` lo hace reproducible.
 - `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
   (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
+- `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
+  ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
+  escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.
 
 ---
 
