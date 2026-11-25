@@ -69,7 +69,7 @@ astra-traffic-simulator/
     │       ├── app/          AstraApp, MainController
     │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, PauseGate,
     │       │                 SimConfig, VehicleSpawner, ParallelUpdater
-    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, Road, RoadGraph
+    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, NodeKind, Road, RoadGraph
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
     │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
     │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
@@ -86,7 +86,8 @@ astra-traffic-simulator/
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel
     │       └── util/         MapLoader, SimLogger
     ├── main/resources/com/astra/
-    │   ├── maps/city-3x3.json
+    │   ├── maps/city-3x3.json      (mapa original; lo usan los tests)
+    │   ├── maps/city-3x3-v2.json   (mapa por defecto: gateways y playas)
     │   ├── css/astra.css
     │   └── config.properties
     └── test/java/com/astra/  (espejo de los paquetes)
@@ -312,6 +313,10 @@ log.level=INFO
   Se cambia en vivo con `SetMutexModeCmd`.
 - `distributed.grantTimeoutTicks`: ticks que un vehículo puede tener la sección de Ricart‑Agrawala sin lograr
   entrar a la zona; al cumplirse la suelta (`cancel`) y vuelve a encolarse.
+- `map.file`: mapa JSON relativo a `src/main/resources/com/astra/`. Cada nodo acepta `kind` (`INTERSECTION` por
+  defecto, `GATEWAY`, `JUNCTION` o `PARKING`) y `capacity` (solo `PARKING`, >= 1); el mapa acepta
+  `"bounds": {"width", "height"}` (si falta, se calcula con el mismo margen que el contenido). Una `PARKING` o una
+  `GATEWAY` tiene exactamente una vía de doble sentido. Solo los `INTERSECTION` pueden tener semáforo.
 - `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
   ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
   escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.
