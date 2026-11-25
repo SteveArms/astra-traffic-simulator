@@ -69,6 +69,7 @@ public final class AstraApp extends Application {
         statsPanel = new StatsPanel(engine::latestSnapshot);
         renderer.setOnIntersectionSelected(controlPanel::selectIntersection);
         controlPanel.setOnIntersectionChosen(renderer::select);
+        controlPanel.setOnShowLabelsChanged(renderer::setShowLabels);
         if (!lightIds.isEmpty()) {
             renderer.select(lightIds.get(0));
         }

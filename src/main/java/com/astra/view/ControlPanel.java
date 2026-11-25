@@ -24,6 +24,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
@@ -62,6 +63,7 @@ public final class ControlPanel extends VBox {
     private final Button stepButton = new Button("Paso");
     private final Slider speedSlider = new Slider(MIN_LOG2, MAX_LOG2, 0);
     private final Label speedLabel = new Label();
+    private final CheckBox labelsBox = new CheckBox("Mostrar etiquetas");
     private final ChoiceBox<VehicleKind> kindChoice = new ChoiceBox<>();
     private final ChoiceBox<String> strategyChoice = new ChoiceBox<>();
     private final ToggleGroup modeGroup = new ToggleGroup();
@@ -76,6 +78,7 @@ public final class ControlPanel extends VBox {
     private final Timeline refresh;
 
     private Consumer<String> onIntersectionChosen = id -> { };
+    private Consumer<Boolean> onShowLabelsChanged = show -> { };
     private List<String> shownHistory = List.of();
     // Evita reenviar comandos cuando el panel se sincroniza con el snapshot.
     private boolean syncing;
@@ -106,6 +109,11 @@ public final class ControlPanel extends VBox {
 
     public void setOnIntersectionChosen(Consumer<String> listener) {
         onIntersectionChosen = Objects.requireNonNull(listener, "listener");
+    }
+
+    /** Recibe el estado de "Mostrar etiquetas" (ids de nodos y vehículos en el mapa); empieza desmarcada. */
+    public void setOnShowLabelsChanged(Consumer<Boolean> listener) {
+        onShowLabelsChanged = Objects.requireNonNull(listener, "listener");
     }
 
     /** Selección hecha en el mapa; no vuelve a notificar. */
@@ -178,7 +186,9 @@ public final class ControlPanel extends VBox {
         speedLabel.setLabelFor(speedSlider);
 
         HBox speedHeader = row(new Label("Velocidad"), spacer(), speedLabel);
-        return section("Simulación", buttons, speedHeader, speedSlider);
+        labelsBox.setTooltip(new Tooltip("Ids de las intersecciones y de los vehículos en el mapa"));
+        labelsBox.selectedProperty().addListener((obs, was, now) -> onShowLabelsChanged.accept(now));
+        return section("Simulación", buttons, speedHeader, speedSlider, labelsBox);
     }
 
     private Node vehiclesSection() {

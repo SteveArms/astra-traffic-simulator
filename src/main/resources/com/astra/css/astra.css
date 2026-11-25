@@ -115,6 +115,39 @@
     -fx-background-radius: 9, 7, 6;
 }
 
+/* Casilla: borde de 3:1 como los demás controles; marcada, el acento con la marca en texto oscuro. */
+.check-box {
+    -fx-text-fill: astra-text;
+}
+
+.check-box > .box {
+    -fx-background-color: astra-border, astra-control;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 4, 3;
+}
+
+.check-box:selected > .box {
+    -fx-background-color: astra-accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: astra-on-accent;
+}
+
+.check-box:focus-visible > .box {
+    -fx-background-color: astra-accent, astra-surface, astra-border, astra-control;
+    -fx-background-insets: -3, -1, 0, 1;
+    -fx-background-radius: 7, 5, 4, 3;
+}
+
+.check-box:selected:focus-visible > .box {
+    -fx-background-color: astra-accent, astra-surface, astra-accent;
+    -fx-background-insets: -3, -1, 0;
+    -fx-background-radius: 7, 5, 4;
+}
+
 .choice-box {
     -fx-background-color: astra-border, astra-control;
     -fx-background-insets: 0, 1;
