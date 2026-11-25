@@ -243,6 +243,9 @@ routing.weight.leastCongested=0.3
 routing.weight.random=0.2
 emergency.preemptDistance=80
 emergency.maxSeconds=30
+distributed.latencyMinMillis=5
+distributed.latencyMaxMillis=40
+distributed.seed=7
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
 log.console=true
@@ -291,6 +294,9 @@ log.level=INFO
   tick siguiente con otro origen y destino. `spawn.seed` lo hace reproducible.
 - `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
   (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
+- `distributed.*` (`SimulatedNetwork`): cada mensaje entre procesos tarda un retardo sorteado entre
+  `distributed.latencyMinMillis` (>= 0) y `distributed.latencyMaxMillis` (>= el mínimo), ambos en ms e incluidos.
+  `distributed.seed` hace reproducible el sorteo.
 - `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
   ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
   escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.

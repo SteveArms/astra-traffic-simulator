@@ -54,6 +54,9 @@ class SimConfigTest {
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals(Duration.ofMillis(5), config.latencyMin());
+        assertEquals(Duration.ofMillis(40), config.latencyMax());
+        assertEquals(7, config.networkSeed());
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -95,6 +98,9 @@ class SimConfigTest {
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
         assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals(Duration.ofMillis(5), config.latencyMin());
+        assertEquals(Duration.ofMillis(40), config.latencyMax());
+        assertEquals(7, config.networkSeed());
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -252,6 +258,40 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(SimConfig.ENGINE_PARALLEL), e.getMessage());
+    }
+
+    @Test
+    void latencyKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, "0");
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS, "0");
+        props.setProperty(SimConfig.DISTRIBUTED_SEED, "99");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(Duration.ZERO, config.latencyMin());
+        assertEquals(Duration.ZERO, config.latencyMax());
+        assertEquals(99, config.networkSeed());
+    }
+
+    @Test
+    void latencyMaxBelowMinThrowsWithKeyName() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, "50");
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS, "10");
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_LATENCY_MAX_MILLIS), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "abc", ""})
+    void invalidLatencyMinThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS), e.getMessage());
     }
 
     @Test
