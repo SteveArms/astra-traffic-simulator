@@ -109,6 +109,8 @@ Reglas de dependencia entre paquetes:
 | `astra-engine` | Bucle de simulación (tick fijo, por defecto 50 ms) | `WorldState` (dueño exclusivo) |
 | `astra-worker-N` (pool) | Actualizar vehículos en paralelo dentro de un tick | Su vehículo + `Semaphore` de intersección |
 | `astra-lights` (`ScheduledExecutorService`) | Transiciones de los semáforos | Estado propio del `TrafficLight` |
+| `astra-net` (`ScheduledExecutorService`, 1 hilo) | Entregar los mensajes de `SimulatedNetwork` | Lo que toque cada `MessageHandler` (corren todos aquí) |
+| `astra-logger` | Escribir en consola y archivo las líneas de `SimLogger` | Su cola y el archivo de log |
 
 Reglas:
 
@@ -122,8 +124,8 @@ Reglas:
 5. Las zonas de conflicto de cada intersección se protegen con `Semaphore` y **`tryAcquire`**
    (nunca `acquire` bloqueante dentro de un tick → evita congelar el motor y deadlocks).
 6. Fin de tick sincronizado con `Phaser` / `invokeAll`; ningún worker sobrevive al tick.
-7. La pausa usa `PauseGate` (`ReentrantLock` + `Condition`) y la respetan **motor y
-   semáforos**.
+7. La pausa usa `PauseGate` (`ReentrantLock` + `Condition`) y la respetan **motor,
+   semáforos y red simulada** (los mensajes que llegan en pausa se retienen hasta reanudar).
 8. Todos los hilos son *daemon* o se detienen en `AstraApp.stop()` (`shutdownNow` +
    `awaitTermination`). Nombrar los hilos (`astra-engine`, `astra-lights-1`, …).
 9. Colecciones compartidas: `ConcurrentHashMap`, `PriorityBlockingQueue`,
