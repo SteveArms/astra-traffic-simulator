@@ -47,6 +47,7 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String STATS_SAMPLE_SECONDS = "stats.sampleSeconds";
     static final String STATS_SERIES_CAPACITY = "stats.seriesCapacity";
     static final String SPAWN_INTERVAL_MILLIS = "spawn.intervalMillis";
+    static final String SPAWN_BATCH_SIZE = "spawn.batchSize";
     static final String VEHICLE_MAX_COUNT = "vehicle.maxCount";
     static final String CAR_MAX_SPEED = "vehicle.car.maxSpeed";
     static final String CAR_ACCELERATION = "vehicle.car.acceleration";
@@ -94,6 +95,7 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final long DEFAULT_STATS_SAMPLE_SECONDS = 1;
     private static final int DEFAULT_STATS_SERIES_CAPACITY = 300;
     private static final long DEFAULT_SPAWN_INTERVAL_MILLIS = 300;
+    private static final int DEFAULT_SPAWN_BATCH_SIZE = 1;
     private static final int DEFAULT_VEHICLE_MAX_COUNT = 150;
     private static final double DEFAULT_CAR_MAX_SPEED = 14;
     private static final double DEFAULT_CAR_ACCELERATION = 3;
@@ -140,6 +142,7 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final Duration statsSampleInterval;
     private final int statsSeriesCapacity;
     private final Duration spawnIntervalMillis;
+    private final int spawnBatchSize;
     private final int vehicleMaxCount;
     private final double carMaxSpeed;
     private final double carAcceleration;
@@ -183,6 +186,7 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         statsSeriesCapacity = positiveInt(p, STATS_SERIES_CAPACITY, DEFAULT_STATS_SERIES_CAPACITY);
         spawnIntervalMillis = Duration.ofMillis(
                 positiveLong(p, SPAWN_INTERVAL_MILLIS, DEFAULT_SPAWN_INTERVAL_MILLIS));
+        spawnBatchSize = positiveInt(p, SPAWN_BATCH_SIZE, DEFAULT_SPAWN_BATCH_SIZE);
         vehicleMaxCount = positiveInt(p, VEHICLE_MAX_COUNT, DEFAULT_VEHICLE_MAX_COUNT);
         carMaxSpeed = positiveDouble(p, CAR_MAX_SPEED, DEFAULT_CAR_MAX_SPEED);
         carAcceleration = positiveDouble(p, CAR_ACCELERATION, DEFAULT_CAR_ACCELERATION);
@@ -311,6 +315,11 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
 
     public Duration spawnIntervalMillis() {
         return spawnIntervalMillis;
+    }
+
+    /** Vehículos que se generan juntos en cada intervalo de {@code spawn.intervalMillis}. */
+    public int spawnBatchSize() {
+        return spawnBatchSize;
     }
 
     public int vehicleMaxCount() {

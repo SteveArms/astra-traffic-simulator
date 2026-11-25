@@ -31,7 +31,8 @@ class SimConfigTest {
         assertEquals(Duration.ofSeconds(2), config.smartExtensionStepSeconds());
         assertEquals(120, config.smartQueueRadius());
         assertStats(config);
-        assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
+        assertEquals(Duration.ofMillis(6_000), config.spawnIntervalMillis());
+        assertEquals(4, config.spawnBatchSize());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
@@ -70,6 +71,7 @@ class SimConfigTest {
         assertEquals(120, config.smartQueueRadius());
         assertStats(config);
         assertEquals(Duration.ofMillis(300), config.spawnIntervalMillis());
+        assertEquals(1, config.spawnBatchSize());
         assertEquals(150, config.vehicleMaxCount());
         assertEquals(14, config.carMaxSpeed());
         assertEquals(3, config.carAcceleration());
