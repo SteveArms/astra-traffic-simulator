@@ -2,6 +2,7 @@ package com.astra.view;
 
 import com.astra.command.CommandBus;
 import com.astra.command.Commands;
+import com.astra.core.MutexMode;
 import com.astra.core.SimulationControl;
 import com.astra.core.WorldSnapshot;
 import com.astra.model.VehicleKind;
@@ -67,6 +68,9 @@ public final class ControlPanel extends VBox {
     private final ToggleButton fixedToggle = new ToggleButton("Fijo");
     private final ToggleButton smartToggle = new ToggleButton("Inteligente");
     private final ChoiceBox<String> intersectionChoice = new ChoiceBox<>();
+    private final ToggleGroup mutexGroup = new ToggleGroup();
+    private final ToggleButton semaphoreToggle = new ToggleButton("Semaphore");
+    private final ToggleButton ricartToggle = new ToggleButton("Ricart-Agrawala");
     private final ListView<String> history = new ListView<>();
     private final PauseTransition speedDebounce = new PauseTransition(SPEED_DEBOUNCE);
     private final Timeline refresh;
@@ -84,7 +88,7 @@ public final class ControlPanel extends VBox {
         Node historyBox = historySection();
         VBox.setVgrow(historyBox, Priority.ALWAYS);
         getChildren().addAll(simulationSection(), vehiclesSection(), lightsSection(List.copyOf(intersectionIds)),
-                historyBox);
+                mutexSection(), historyBox);
 
         refresh = new Timeline(new KeyFrame(REFRESH, e -> sync()));
         refresh.setCycleCount(Animation.INDEFINITE);
@@ -225,6 +229,18 @@ public final class ControlPanel extends VBox {
                 row(greenNs, greenEw));
     }
 
+    private Node mutexSection() {
+        semaphoreToggle.setToggleGroup(mutexGroup);
+        ricartToggle.setToggleGroup(mutexGroup);
+        semaphoreToggle.setUserData(MutexMode.SEMAPHORE);
+        ricartToggle.setUserData(MutexMode.RICART_AGRAWALA);
+        semaphoreToggle.setTooltip(new Tooltip("Cada intersección admite vehículos hasta su capacidad"));
+        ricartToggle.setTooltip(new Tooltip("Los accesos de cada intersección se turnan por mensajes"));
+        mutexGroup.selectToggle(semaphoreToggle);
+        mutexGroup.selectedToggleProperty().addListener((obs, old, now) -> onMutexToggled(old, now));
+        return section("Exclusión", row(semaphoreToggle, ricartToggle));
+    }
+
     private Node historySection() {
         history.setPlaceholder(new Label("Aún no hay comandos"));
         history.setFocusTraversable(false);
@@ -244,6 +260,10 @@ public final class ControlPanel extends VBox {
             Toggle wanted = snapshot.lightMode() == LightMode.SMART ? smartToggle : fixedToggle;
             if (modeGroup.getSelectedToggle() != wanted) {
                 modeGroup.selectToggle(wanted);
+            }
+            Toggle mutex = snapshot.mutexMode() == MutexMode.RICART_AGRAWALA ? ricartToggle : semaphoreToggle;
+            if (mutexGroup.getSelectedToggle() != mutex) {
+                mutexGroup.selectToggle(mutex);
             }
         } finally {
             syncing = false;
@@ -265,6 +285,16 @@ public final class ControlPanel extends VBox {
         }
         if (!syncing && now != old) {
             bus.submit(Commands.lightMode((LightMode) now.getUserData()));
+        }
+    }
+
+    private void onMutexToggled(Toggle old, Toggle now) {
+        if (now == null) {
+            mutexGroup.selectToggle(old);
+            return;
+        }
+        if (!syncing && now != old) {
+            bus.submit(Commands.mutexMode((MutexMode) now.getUserData()));
         }
     }
 

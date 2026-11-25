@@ -1,5 +1,7 @@
 package com.astra.view;
 
+import com.astra.core.MutexMode;
+import com.astra.core.NetworkView;
 import com.astra.core.StatsPoint;
 import com.astra.core.StatsView;
 import com.astra.core.WorldSnapshot;
@@ -46,6 +48,9 @@ public final class StatsPanel extends VBox {
     private final Label throughput = value();
     private final Label queue = value();
     private final Label lightMode = value();
+    private final Label mutexMode = value();
+    private final Label messagesSent = value();
+    private final Label messagesInFlight = value();
     private final Label tick = value();
     private final Label simTime = value();
     private final XYChart.Series<Number, Number> waitSeries = new XYChart.Series<>();
@@ -71,6 +76,9 @@ public final class StatsPanel extends VBox {
         addRow("Throughput", throughput);
         addRow("Cola actual / máx.", queue);
         addRow("Semáforos", lightMode);
+        addRow("Exclusión", mutexMode);
+        addRow("Mensajes enviados", messagesSent);
+        addRow("Mensajes en vuelo", messagesInFlight);
         addRow("Tick", tick);
         addRow("Tiempo simulado", simTime);
 
@@ -106,6 +114,10 @@ public final class StatsPanel extends VBox {
         throughput.setText("%.1f veh/min".formatted(stats.throughputPerMin()));
         queue.setText("%d / %d".formatted(stats.currentQueue(), stats.maxQueue()));
         lightMode.setText(snapshot.lightMode() == LightMode.SMART ? "Inteligente" : "Fijo");
+        mutexMode.setText(snapshot.mutexMode() == MutexMode.RICART_AGRAWALA ? "Ricart-Agrawala" : "Semaphore");
+        NetworkView network = snapshot.network();
+        messagesSent.setText(Long.toString(network.sent()));
+        messagesInFlight.setText(Long.toString(network.inFlight()));
         tick.setText(Long.toString(snapshot.tick()));
         long seconds = (long) snapshot.simTimeSeconds();
         simTime.setText("%02d:%02d".formatted(seconds / SECONDS_PER_MINUTE, seconds % SECONDS_PER_MINUTE));

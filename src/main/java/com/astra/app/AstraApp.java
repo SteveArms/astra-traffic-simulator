@@ -8,6 +8,8 @@ import com.astra.core.SimulationControl;
 import com.astra.core.SimulationEngine;
 import com.astra.core.VehicleSpawner;
 import com.astra.core.WorldState;
+import com.astra.distributed.IntersectionMutex;
+import com.astra.distributed.SimulatedNetwork;
 import com.astra.graph.Intersection;
 import com.astra.traffic.LightController;
 import com.astra.traffic.TrafficLight;
@@ -33,6 +35,7 @@ public final class AstraApp extends Application {
     private static final double STATS_PANEL_WIDTH = 300;
 
     private LightController lights;
+    private SimulatedNetwork network;
     private SimulationEngine engine;
     private CityRenderer renderer;
     private ControlPanel controlPanel;
@@ -46,7 +49,10 @@ public final class AstraApp extends Application {
         var control = new SimulationControl();
         lights = new LightController(map.graph(), config, config, control::speedFactor);
         control.pauseGate().addListener(PauseListener.of(lights::pause, lights::resume));
-        var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config));
+        network = new SimulatedNetwork(config);
+        control.pauseGate().addListener(PauseListener.of(network::onPause, network::onResume));
+        var world = new WorldState(map.graph(), config, lights, new IntersectionZones(map.graph(), config), network,
+                IntersectionMutex.forGraph(map.graph(), network));
         var bus = new CommandBus();
         engine = new SimulationEngine(config, world, new VehicleSpawner(world, config), bus, control);
 
@@ -77,6 +83,7 @@ public final class AstraApp extends Application {
         stage.setScene(scene);
         stage.show();
 
+        network.start();
         lights.start();
         engine.start();
         renderer.start();
@@ -84,6 +91,7 @@ public final class AstraApp extends Application {
         statsPanel.start();
     }
 
+    // Orden: vista → motor → semáforos → red → logger, así nadie registra después de cerrar el log.
     @Override
     public void stop() {
         if (statsPanel != null) {
@@ -100,6 +108,9 @@ public final class AstraApp extends Application {
         }
         if (lights != null) {
             lights.stop();
+        }
+        if (network != null) {
+            network.stop();
         }
         SimLogger.shutdown();
     }
