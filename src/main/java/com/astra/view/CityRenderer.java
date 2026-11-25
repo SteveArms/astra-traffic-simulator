@@ -33,7 +33,6 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.ArcType;
-import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -49,12 +48,8 @@ import javafx.scene.text.TextAlignment;
 public final class CityRenderer extends StackPane {
 
     // Presentación, no simulación: no van a config.properties.
-    private static final double LANE_WIDTH = 10;
-    private static final double CENTER_LINE_WIDTH = 1;
-    private static final double[] CENTER_LINE_DASHES = {6, 6};
     private static final double INTERSECTION_SIZE = 24;
     private static final double LABEL_GAP = 4;
-    private static final Font LABEL_FONT = Font.font("System", 12);
 
     private static final double CAR_WIDTH = 6;
     private static final double BUS_WIDTH = 7;
@@ -97,10 +92,6 @@ public final class CityRenderer extends StackPane {
     private static final int SECONDS_PER_MINUTE = 60;
 
     // Contraste medido: texto >= 4.5:1; calles, vehículos y luces >= 3:1 contra su fondo o su contorno.
-    private static final Color BACKGROUND = Color.web("#030712");
-    private static final Color ROAD = Color.web("#5A6372");
-    private static final Color ROAD_CENTER_LINE = Color.web("#E5E7EB");
-    private static final Color INTERSECTION = Color.web("#5A6372");
     private static final Color INTERSECTION_OCCUPIED = Color.web("#8B95A5");
     private static final Color INTERSECTION_FULL_BORDER = Color.web("#FB923C");
     private static final Color OUTLINE = Color.web("#030712");
@@ -122,6 +113,7 @@ public final class CityRenderer extends StackPane {
     private final RoadGraph graph;
     private final MapLoader.Bounds bounds;
     private final ViewTransform view = new ViewTransform();
+    private final CityPainter city;
     private final Supplier<WorldSnapshot> snapshotSource;
     private final CommandBus bus;
     private final ContextMenu lightMenu = new ContextMenu();
@@ -145,6 +137,7 @@ public final class CityRenderer extends StackPane {
         this.snapshotSource = Objects.requireNonNull(snapshotSource, "snapshotSource");
         this.bus = Objects.requireNonNull(bus, "bus");
         this.approaches = approachesOf(graph);
+        this.city = new CityPainter(graph, bounds);
         graph.vertices().forEach(i -> intersections.put(i.id(), i));
         setOnMouseClicked(this::onClick);
         setOnContextMenuRequested(this::onContextMenu);
@@ -233,55 +226,12 @@ public final class CityRenderer extends StackPane {
     private void drawStatic() {
         view.fit(staticLayer.getWidth(), staticLayer.getHeight(), bounds.width(), bounds.height(), VIEW_MARGIN);
         GraphicsContext gc = staticLayer.getGraphicsContext2D();
-        gc.setFill(BACKGROUND);
+        gc.setFill(CityPainter.BACKGROUND);
         gc.fillRect(0, 0, staticLayer.getWidth(), staticLayer.getHeight());
         gc.save();
         view.apply(gc);
-
-        gc.setLineCap(StrokeLineCap.BUTT);
-        for (Road road : graph.edges()) {
-            Road reverse = reverseOf(road);
-            if (reverse == null) {
-                drawRoad(gc, road, road.lanes(), false);
-            } else if (road.from().id().compareTo(road.to().id()) < 0) {
-                drawRoad(gc, road, road.lanes() + reverse.lanes(), true);
-            }
-        }
-
-        gc.setFont(LABEL_FONT);
-        gc.setTextAlign(TextAlignment.LEFT);
-        gc.setTextBaseline(VPos.TOP);
-        double half = INTERSECTION_SIZE / 2;
-        for (Intersection i : graph.vertices()) {
-            gc.setFill(INTERSECTION);
-            gc.fillRect(i.x() - half, i.y() - half, INTERSECTION_SIZE, INTERSECTION_SIZE);
-            gc.setFill(LABEL_TEXT);
-            gc.fillText(i.id(), i.x() + half + LABEL_GAP, i.y() + half + LABEL_GAP);
-        }
+        city.paint(gc);
         gc.restore();
-    }
-
-    private void drawRoad(GraphicsContext gc, Road road, int totalLanes, boolean twoWay) {
-        gc.setStroke(ROAD);
-        gc.setLineWidth(totalLanes * LANE_WIDTH);
-        gc.setLineDashes();
-        gc.strokeLine(road.from().x(), road.from().y(), road.to().x(), road.to().y());
-        if (twoWay) {
-            gc.setStroke(ROAD_CENTER_LINE);
-            gc.setLineWidth(CENTER_LINE_WIDTH);
-            gc.setLineDashes(CENTER_LINE_DASHES);
-            gc.strokeLine(road.from().x(), road.from().y(), road.to().x(), road.to().y());
-            gc.setLineDashes();
-        }
-    }
-
-    private Road reverseOf(Road road) {
-        for (Road candidate : graph.outgoing(road.to())) {
-            if (candidate.to().equals(road.from())) {
-                return candidate;
-            }
-        }
-        return null;
     }
 
     private void drawFrame(long now) {
