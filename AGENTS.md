@@ -83,6 +83,8 @@ astra-traffic-simulator/
     │       ├── events/       SimEvent, EventQueue
     │       ├── distributed/  LamportClock, Request, Message, SimulatedNetwork,
     │       │                 RicartAgrawalaNode, IntersectionMutex
+    │       ├── parking/      ResourcePool<T>, ParkingLot, ParkingDirectory, ParkingSearchStrategy,
+    │       │                 NearestAlternative/WaitAtEntrance/GiveUpStrategy, ParkingSearchPolicy
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel
     │       └── util/         MapLoader, SimLogger
     ├── main/resources/com/astra/
@@ -100,6 +102,7 @@ Reglas de dependencia entre paquetes:
   (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
 - `graph` no conoce `model` ni `traffic`: es genérico.
 - `model` solo depende de `graph` y `routing`.
+- `parking` depende de `graph` y `model`, nunca de `core`: recibe sus parámetros por `ParkingSettings`.
 
 ---
 
@@ -182,6 +185,10 @@ public class Dijkstra<V, E extends Edge<V>> {
 - `routing` solo depende de `graph`: recibe sus parámetros a través de `RoutingSettings`
   (`SimConfig` la implementa) y la ocupación de las vías a través de `RoadOccupancy`.
 - Una nueva forma de enrutar = una nueva `RouteStrategy`. **No** meter `if` en `Vehicle`.
+- Una nueva forma de buscar estacionamiento = una nueva `ParkingSearchStrategy` (devuelve una `SearchDecision`
+  sellada: `Reroute`, `Wait` o `GiveUp`). El tope `parking.maxSearchAttempts` lo aplica `ParkingSearchPolicy`.
+- Los cajones de una playa son un `ResourcePool<String>` (`Semaphore` justo + arreglo de slots, `tryAcquire` sin
+  bloquear). Llegadas, esperas y salidas ocurren en la fase C del motor (`ParkingService`), en tiempo simulado.
 - Una nueva acción de usuario = un nuevo `Command`.
 
 ---
