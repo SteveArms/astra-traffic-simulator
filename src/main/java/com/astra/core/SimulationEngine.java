@@ -150,6 +150,26 @@ public final class SimulationEngine {
         return world.lights();
     }
 
+    /**
+     * Cambia el modo de exclusión mutua de las intersecciones; ver {@link WorldState#setMutexMode}.
+     *
+     * @return {@code false} si ya estaba en ese modo
+     * @implNote Called from the astra-engine thread (Commands).
+     */
+    public boolean setMutexMode(MutexMode mode) {
+        return world.setMutexMode(mode);
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public MutexMode mutexMode() {
+        return world.mutexMode();
+    }
+
+    /** {@code true} si el mundo tiene mutex de Ricart-Agrawala. @implNote Safe to call from any thread. */
+    public boolean hasDistributedLayer() {
+        return !world.mutexes().isEmpty();
+    }
+
     /** Vacío si el motor se creó sin spawner. @implNote Called from the astra-engine thread (Commands). */
     public Optional<VehicleSpawner> spawner() {
         return world.spawner();

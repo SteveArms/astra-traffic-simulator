@@ -68,6 +68,17 @@ public final class IntersectionMutex {
         return new IntersectionMutex(intersection, incoming, network);
     }
 
+    /** Un mutex por cada intersección del grafo que tenga al menos una vía entrante. */
+    public static Map<Intersection, IntersectionMutex> forGraph(Graph<Intersection, Road> graph,
+            SimulatedNetwork network) {
+        Map<Intersection, IntersectionMutex> mutexes = new LinkedHashMap<>();
+        graph.vertices().stream()
+                .sorted(Comparator.comparing(Intersection::id))
+                .filter(at -> graph.edges().stream().anyMatch(road -> road.to().equals(at)))
+                .forEach(at -> mutexes.put(at, of(graph, at, network)));
+        return Map.copyOf(mutexes);
+    }
+
     public String intersectionId() {
         return intersectionId;
     }

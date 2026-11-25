@@ -1,5 +1,7 @@
 package com.astra.core;
 
+import com.astra.distributed.IntersectionMutex;
+import com.astra.distributed.SimulatedNetwork;
 import com.astra.graph.Intersection;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
@@ -13,6 +15,7 @@ import com.astra.traffic.LightController;
 import com.astra.traffic.LightState;
 import com.astra.traffic.QueueSensor;
 import com.astra.traffic.TrafficLight;
+import com.astra.util.SimLogger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
@@ -36,8 +40,9 @@ import java.util.function.IntConsumer;
  *       vía, que no cambia hasta la fase C, y ningún vehículo se mueve hasta la fase B: por eso no hay carreras
  *       de datos aunque los workers lean vehículos ajenos. Lo único que escribe es estado concurrente:
  *       {@code zone.tryEnter} (un {@link java.util.concurrent.Semaphore}), {@code preempt} del semáforo (su
- *       lock), {@code entryClaims.putIfAbsent} y las entradas propias de {@code held} y {@code preempted}
- *       ({@link ConcurrentHashMap}).</li>
+ *       lock), {@code entryClaims.putIfAbsent}, las entradas propias de {@code held}, {@code preempted},
+ *       {@code raQueued}, {@code grantTicks} y {@code raCrossings} ({@link ConcurrentHashMap}) y, en modo
+ *       {@link MutexMode#RICART_AGRAWALA}, {@link IntersectionMutex} (su lock; nunca bloquea en la red).</li>
  *   <li><b>B · MOVE</b> (mismos hilos y bloques que A): cada vehículo aplica {@code update(dt, plan[i])} y solo
  *       modifica su propio estado.</li>
  *   <li><b>C · COMMIT</b> (siempre astra-engine, secuencial): libera zonas y semáforos, recalcula rutas
@@ -46,6 +51,13 @@ import java.util.function.IntConsumer;
  * </ol>
  * El {@link java.util.concurrent.Phaser} de {@link ParallelUpdater} separa A de B y da la relación
  * <i>happens-before</i> entre las escrituras de los workers y la fase C.
+ *
+ * <p>Con {@link MutexMode#RICART_AGRAWALA}, un vehículo se encola en el {@link IntersectionMutex} de la intersección
+ * una sola vez, cuando ya podría cruzar por las demás reglas (luz, espacio y cercanía a la línea), y solo cruza si
+ * además tiene la sección crítica; la zona de capacidad sigue como segunda capa. Si tiene la sección y no logra
+ * entrar en {@code distributed.grantTimeoutTicks}, la suelta y vuelve a encolarse; si su luz deja de permitirle
+ * cruzar, sale de la cola. Al salir del box la libera. Los vehículos que nacen en el centro de una intersección no
+ * cruzan desde ningún acceso, así que no pasan por Ricart-Agrawala.
  *
  * @implNote Su único dueño es astra-engine; los demás hilos usan {@link WorldSnapshot} o {@link #queueLength}.
  */
@@ -62,6 +74,18 @@ public final class WorldState implements QueueSensor {
     private final double approachMargin;
     private final double preemptDistance;
     private final double queueRadius;
+    private final int grantTimeoutTicks;
+    // null: sin capa distribuida (solo modo SEMAPHORE).
+    private final SimulatedNetwork network;
+    private final Map<Intersection, IntersectionMutex> mutexes;
+    // Lo escribe astra-engine entre ticks; los workers lo leen en la fase A.
+    private volatile MutexMode mutexMode;
+    // Mutex en cuya cola está cada vehículo, o cuya sección tiene; en la fase A cada worker toca solo los suyos.
+    private final Map<String, IntersectionMutex> raQueued = new ConcurrentHashMap<>();
+    // Ticks seguidos con la sección sin haber entrado a la zona.
+    private final Map<String, Integer> grantTicks = new ConcurrentHashMap<>();
+    // Vía por la que entró a la zona cada vehículo que cruza con la sección de Ricart-Agrawala.
+    private final Map<String, Road> raCrossings = new ConcurrentHashMap<>();
     // Largo de vía que ocupa un auto con su hueco: base de la capacidad aproximada de cada vía.
     private final double carFootprint;
     private final List<Vehicle> vehicles = new ArrayList<>();
@@ -82,7 +106,17 @@ public final class WorldState implements QueueSensor {
     private long spawned;
     private long despawned;
 
+    /** Sin capa distribuida: solo admite el modo {@link MutexMode#SEMAPHORE}. */
     public WorldState(RoadGraph graph, SimConfig cfg, LightController lights, IntersectionZones zones) {
+        this(graph, cfg, lights, zones, null, Map.of());
+    }
+
+    /**
+     * @param network red de los {@code mutexes}; solo se lee para el snapshot ({@code null} si no hay)
+     * @param mutexes un {@link IntersectionMutex} por intersección con vías entrantes
+     */
+    public WorldState(RoadGraph graph, SimConfig cfg, LightController lights, IntersectionZones zones,
+            SimulatedNetwork network, Map<Intersection, IntersectionMutex> mutexes) {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.lights = Objects.requireNonNull(lights, "lights");
         this.zones = Objects.requireNonNull(zones, "zones");
@@ -92,6 +126,11 @@ public final class WorldState implements QueueSensor {
         this.approachMargin = cfg.approachMargin();
         this.preemptDistance = cfg.emergencyPreemptDistance();
         this.queueRadius = cfg.smartQueueRadius();
+        this.grantTimeoutTicks = cfg.grantTimeoutTicks();
+        this.network = network;
+        this.mutexes = Map.copyOf(Objects.requireNonNull(mutexes, "mutexes"));
+        requireMutexesFor(cfg.mutexMode());
+        this.mutexMode = cfg.mutexMode();
         this.stats = new SimStats(cfg);
         this.carFootprint = cfg.minGap() + cfg.specFor(VehicleKind.CAR).length();
         this.updater = cfg.engineParallel()
@@ -134,6 +173,53 @@ public final class WorldState implements QueueSensor {
 
     public Optional<VehicleSpawner> spawner() {
         return Optional.ofNullable(spawner);
+    }
+
+    /** @implNote Safe to call from any thread. */
+    public MutexMode mutexMode() {
+        return mutexMode;
+    }
+
+    /**
+     * Cambia el modo de exclusión mutua. Antes cancela todas las peticiones de Ricart-Agrawala: los vehículos que ya
+     * están dentro de una zona terminan de cruzar con su permiso del semáforo de capacidad.
+     *
+     * @return {@code false} si ya estaba en ese modo
+     * @throws IllegalStateException si se pide Ricart-Agrawala sin mutex
+     * @implNote Called from astra-engine between ticks (SetMutexModeCmd), never during the phases.
+     */
+    public boolean setMutexMode(MutexMode mode) {
+        Objects.requireNonNull(mode, "mode");
+        if (mode == mutexMode) {
+            return false;
+        }
+        requireMutexesFor(mode);
+        raQueued.forEach((vehicleId, mutex) -> mutex.cancel(vehicleId));
+        raQueued.clear();
+        grantTicks.clear();
+        raCrossings.clear();
+        mutexMode = mode;
+        SimLogger.info(SimLogger.Category.ENGINE, "mutex mode -> " + mode);
+        return true;
+    }
+
+    /** Mutex por intersección; vacío sin capa distribuida. */
+    public Map<Intersection, IntersectionMutex> mutexes() {
+        return mutexes;
+    }
+
+    /**
+     * Vía por la que entró cada vehículo que está cruzando una zona con la sección de Ricart-Agrawala.
+     *
+     * @implNote Called from astra-engine, or from tests with the engine stopped.
+     */
+    public Map<String, Road> raCrossings() {
+        return Map.copyOf(raCrossings);
+    }
+
+    /** Vehículos encolados en algún mutex o con su sección. @implNote Called from astra-engine or tests. */
+    public Set<String> raQueuedVehicles() {
+        return Set.copyOf(raQueued.keySet());
     }
 
     /**
@@ -226,8 +312,13 @@ public final class WorldState implements QueueSensor {
                     queueLength(at, Axis.EW)));
         }
         lightViews.sort(Comparator.comparing(LightView::intersectionId));
+        List<MutexView> mutexViews = new ArrayList<>();
+        mutexes.forEach((at, mutex) -> mutexViews.add(new MutexView(at.id(), mutex.holder(), mutex.waiting().size())));
+        mutexViews.sort(Comparator.comparing(MutexView::intersectionId));
+        NetworkView net = network == null ? NetworkView.EMPTY
+                : new NetworkView(network.sentCount(), network.deliveredCount(), network.inFlightCount());
         return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
-                speedFactor, stats.toView(), lights.mode());
+                speedFactor, stats.toView(), lights.mode(), mutexMode, mutexViews, net);
     }
 
     /** @implNote Called from astra-engine. */
@@ -284,6 +375,8 @@ public final class WorldState implements QueueSensor {
                 stats.recordArrival(vehicle.kind(), vehicle.tripSeconds(), vehicle.waitSeconds());
             } else if (!vehicle.currentRoad().equals(before[i]) && vehicle.strategy().isAdaptive()) {
                 vehicle.reroute(graph, vehicle.currentRoad().to());
+                // Una petición pendiente para la siguiente intersección se pidió con la ruta vieja.
+                leaveQueue(vehicle.id(), vehicle.currentRoad().to());
             }
         }
         vehicles.removeIf(Vehicle::isFinished);
@@ -341,15 +434,27 @@ public final class WorldState implements QueueSensor {
         Road road = vehicle.currentRoad();
         double toLine = vehicle.remainingOnRoad() - stopLineOffset;
         IntersectionZone zone = zones.zoneOf(road.to());
+        boolean ricart = mutexMode == MutexMode.RICART_AGRAWALA;
         // Con la zona ya reservada está comprometido: cruza aunque la luz cambie.
-        if (!zone.contains(vehicle.id())) {
+        boolean committed = zone.contains(vehicle.id());
+        if (!committed) {
             if (toLine >= stopLineOffset + approachMargin || !lightAllows(road, toLine)) {
+                if (ricart) {
+                    // Ya no podría cruzar: no ocupa la cola ni retiene la sección.
+                    leaveQueue(vehicle.id(), road.to());
+                }
                 return toLine;
             }
         }
         double space = next.map(nextRoad -> spaceOn(nextRoad, byRoad)).orElse(0.0);
+        if (ricart && !committed && !ricartAllows(vehicle, road, space >= 0)) {
+            return toLine;
+        }
         if (space < 0 || !zone.tryEnter(vehicle.id())) {
             return toLine;
+        }
+        if (ricart && !committed) {
+            raCrossings.put(vehicle.id(), road);
         }
         // Dos vías distintas no meten vehículos a la vez en la misma vía de salida: gana la primera que reserva.
         if (next.isPresent()) {
@@ -361,6 +466,70 @@ public final class WorldState implements QueueSensor {
         }
         holdZone(vehicle, zone);
         return vehicle.remainingOnRoad() + space;
+    }
+
+    // Fase A: encola una sola vez y deja pasar solo con la sección. Toca solo las entradas de su propio vehículo.
+    private boolean ricartAllows(Vehicle vehicle, Road road, boolean hasSpace) {
+        IntersectionMutex mutex = mutexes.get(road.to());
+        String id = vehicle.id();
+        IntersectionMutex queuedAt = raQueued.get(id);
+        if (queuedAt == null) {
+            if (!hasSpace) {
+                return false;
+            }
+            raQueued.put(id, mutex);
+            mutex.enqueue(road, id);
+        } else if (queuedAt != mutex) {
+            // Todavía tiene la sección de la intersección anterior: la suelta al salir de su box.
+            return false;
+        }
+        if (!mutex.isGranted(id)) {
+            return false;
+        }
+        int ticks = grantTicks.merge(id, 1, Integer::sum);
+        if (ticks > grantTimeoutTicks) {
+            leaveQueue(id, road.to());
+            SimLogger.info(SimLogger.Category.ENGINE, id + " gave up the section of " + road.to().id() + " after "
+                    + grantTimeoutTicks + " ticks without crossing");
+            return false;
+        }
+        return hasSpace;
+    }
+
+    // Sale de la cola (o suelta la sección) del mutex de {@code at}, si está en él.
+    private void leaveQueue(String vehicleId, Intersection at) {
+        IntersectionMutex mutex = raQueued.get(vehicleId);
+        if (mutex == null || mutex != mutexes.get(at)) {
+            return;
+        }
+        mutex.cancel(vehicleId);
+        forgetRicart(vehicleId);
+    }
+
+    // Fase C: salió del box de {@code at}; libera la sección para el siguiente.
+    private void finishCrossing(String vehicleId, Intersection at) {
+        IntersectionMutex mutex = raQueued.get(vehicleId);
+        if (mutex == null || mutex != mutexes.get(at)) {
+            return;
+        }
+        if (mutex.isGranted(vehicleId)) {
+            mutex.release(vehicleId);
+        } else {
+            mutex.cancel(vehicleId);
+        }
+        forgetRicart(vehicleId);
+    }
+
+    private void forgetRicart(String vehicleId) {
+        raQueued.remove(vehicleId);
+        grantTicks.remove(vehicleId);
+        raCrossings.remove(vehicleId);
+    }
+
+    private void requireMutexesFor(MutexMode mode) {
+        if (mode == MutexMode.RICART_AGRAWALA && mutexes.isEmpty()) {
+            throw new IllegalStateException("Ricart-Agrawala mode needs an IntersectionMutex per intersection");
+        }
     }
 
     private void holdZone(Vehicle vehicle, IntersectionZone zone) {
@@ -404,6 +573,7 @@ public final class WorldState implements QueueSensor {
                 && vehicle.offset() > boxLength) {
             zone.leave(vehicle.id());
             held.remove(vehicle.id());
+            finishCrossing(vehicle.id(), zone.intersection());
             if (zone.intersection().equals(preempted.get(vehicle.id()))) {
                 releasePreemption(vehicle.id());
             }
@@ -413,6 +583,11 @@ public final class WorldState implements QueueSensor {
     private void releaseAll(Vehicle vehicle) {
         zones.releaseAll(vehicle.id());
         held.remove(vehicle.id());
+        IntersectionMutex mutex = raQueued.get(vehicle.id());
+        if (mutex != null) {
+            mutex.cancel(vehicle.id());
+            forgetRicart(vehicle.id());
+        }
         releasePreemption(vehicle.id());
     }
 

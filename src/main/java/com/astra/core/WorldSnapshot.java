@@ -15,10 +15,11 @@ import java.util.Objects;
  * @param activeByKind vehículos en circulación por tipo
  * @param paused       el mundo está congelado (el tick sigue avanzando, el tiempo simulado no)
  * @param speedFactor  multiplicador de velocidad vigente
+ * @param mutexes      exclusión mutua de Ricart-Agrawala por intersección, ordenada por id
  */
 public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights,
         long spawned, long despawned, Map<VehicleKind, Integer> activeByKind, boolean paused, double speedFactor,
-        StatsView stats, LightMode lightMode) {
+        StatsView stats, LightMode lightMode, MutexMode mutexMode, List<MutexView> mutexes, NetworkView network) {
 
     public static final WorldSnapshot EMPTY =
             new WorldSnapshot(0, 0, List.of(), List.of(), 0, 0, Map.of(), false, 1.0, StatsView.EMPTY,
@@ -30,6 +31,17 @@ public record WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> 
         activeByKind = Map.copyOf(activeByKind);
         Objects.requireNonNull(stats, "stats");
         Objects.requireNonNull(lightMode, "lightMode");
+        Objects.requireNonNull(mutexMode, "mutexMode");
+        mutexes = List.copyOf(mutexes);
+        Objects.requireNonNull(network, "network");
+    }
+
+    /** Sin capa distribuida: modo SEMAPHORE, sin mutex ni tráfico de red. */
+    public WorldSnapshot(long tick, double simTimeSeconds, List<VehicleView> vehicles, List<LightView> lights,
+            long spawned, long despawned, Map<VehicleKind, Integer> activeByKind, boolean paused, double speedFactor,
+            StatsView stats, LightMode lightMode) {
+        this(tick, simTimeSeconds, vehicles, lights, spawned, despawned, activeByKind, paused, speedFactor, stats,
+                lightMode, MutexMode.SEMAPHORE, List.of(), NetworkView.EMPTY);
     }
 
     public int vehicleCount() {
