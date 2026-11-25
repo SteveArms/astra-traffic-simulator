@@ -84,6 +84,19 @@ final class VehiclePainter {
         gc.restore();
     }
 
+    /**
+     * Auto estacionado con su centro en {@code (centerX, centerY)} y el frente hacia {@code headingRad}; mismo color
+     * que tenía en la calle.
+     */
+    static void paintParked(GraphicsContext gc, String vehicleId, double centerX, double centerY, double headingRad,
+            double length) {
+        gc.save();
+        gc.translate(centerX + Math.cos(headingRad) * length / 2, centerY + Math.sin(headingRad) * length / 2);
+        gc.rotate(Math.toDegrees(headingRad));
+        paintCar(gc, length, Math.floorMod(vehicleId.hashCode(), CAR_BODIES.length));
+        gc.restore();
+    }
+
     /** Centro del vehículo dibujado, para ubicar su etiqueta. */
     static double centerX(VehicleView vehicle) {
         double heading = vehicle.headingRad();
