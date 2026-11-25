@@ -212,7 +212,8 @@ smart.queueRadius=120
 stats.throughputWindowSeconds=60
 stats.sampleSeconds=1
 stats.seriesCapacity=300
-spawn.intervalMillis=300
+spawn.intervalMillis=10000
+spawn.batchSize=3
 spawn.seed=42
 spawn.weight.car=0.75
 spawn.weight.bus=0.20
@@ -283,8 +284,9 @@ log.file=logs/astra.log
 - `emergency.maxSeconds`: límite de seguridad de `EmergencyState`; si nadie lo libera antes, el semáforo
   sigue solo con el amarillo de ese eje.
 - `spawn.*`: `VehicleSpawner` corre dentro del tick (hilo `astra-engine`) y cada `spawn.intervalMillis` de
-  tiempo simulado genera un vehículo entre dos intersecciones del borde del mapa, si hay menos de
-  `vehicle.maxCount` y su primera vía tiene espacio. `spawn.seed` lo hace reproducible.
+  tiempo simulado genera un grupo de `spawn.batchSize` vehículos entre intersecciones del borde del mapa, uno
+  por tick, mientras haya menos de `vehicle.maxCount`. Si la primera vía no tiene espacio, lo reintenta en el
+  tick siguiente con otro origen y destino. `spawn.seed` lo hace reproducible.
 - `spawn.weight.{car,bus,ambulance}` y `routing.weight.{shortest,leastCongested,random}`: pesos relativos
   (>= 0, al menos uno > 0 por grupo) de la selección ponderada del tipo de vehículo y de su `RouteStrategy`.
 

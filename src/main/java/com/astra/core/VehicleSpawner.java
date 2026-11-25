@@ -19,8 +19,9 @@ import java.util.Optional;
 import java.util.Random;
 
 /**
- * Genera vehículos entre intersecciones del borde del mapa, uno por intervalo de tiempo simulado. No tiene hilos
- * propios y usa una sola semilla: con la misma configuración, la secuencia es siempre la misma.
+ * Genera vehículos entre intersecciones del borde del mapa: {@code spawn.batchSize} por intervalo de tiempo simulado,
+ * sin superar {@code vehicle.maxCount}. No tiene hilos propios y usa una sola semilla: con la misma configuración, la
+ * secuencia es siempre la misma.
  *
  * @implNote Solo astra-engine lo usa, dentro del tick; antes de iniciar el motor puede usarse desde cualquier hilo.
  */
@@ -33,6 +34,7 @@ public final class VehicleSpawner {
     private final VehicleFactory factory;
     private final Random random;
     private final double intervalSeconds;
+    private final int batchSize;
     private final int maxCount;
     private final List<Intersection> border;
     private final Map<VehicleKind, Double> kindWeights;
@@ -40,6 +42,7 @@ public final class VehicleSpawner {
     private final Map<VehicleKind, Integer> spawnedByKind = new EnumMap<>(VehicleKind.class);
 
     private double accumulator;
+    private int pending;
 
     public VehicleSpawner(WorldState world, SimConfig cfg) {
         this.world = Objects.requireNonNull(world, "world");
@@ -47,6 +50,7 @@ public final class VehicleSpawner {
         this.factory = new VehicleFactory(cfg);
         this.random = new Random(cfg.spawnSeed());
         this.intervalSeconds = cfg.spawnIntervalMillis().toMillis() / MILLIS_PER_SECOND;
+        this.batchSize = cfg.spawnBatchSize();
         this.maxCount = cfg.vehicleMaxCount();
         this.border = borderOf(world.graph().vertices());
         if (border.size() < 2) {
@@ -67,7 +71,11 @@ public final class VehicleSpawner {
         accumulator += dtSeconds;
         while (accumulator >= intervalSeconds) {
             accumulator -= intervalSeconds;
-            trySpawn();
+            pending = batchSize;
+        }
+        // Un intento por tick: los del grupo no nacen encima unos de otros y el que no cabe se reintenta.
+        if (pending > 0 && trySpawn()) {
+            pending--;
         }
     }
 
@@ -121,11 +129,11 @@ public final class VehicleSpawner {
         return border;
     }
 
-    // Si el par elegido no tiene camino o espacio, se descarta y el próximo intervalo sortea otro: así un origen
+    // Si el par elegido no tiene camino o espacio, se descarta y el próximo tick sortea otro: así un origen
     // congestionado no bloquea a los demás. El vehículo solo se crea si entra, y no gasta un id.
-    private void trySpawn() {
+    private boolean trySpawn() {
         if (world.vehicleCount() >= maxCount) {
-            return;
+            return false;
         }
         VehicleKind kind = pick(kindWeights);
         RouteStrategy strategy = pick(strategyWeights);
@@ -134,7 +142,7 @@ public final class VehicleSpawner {
         if (destination.equals(origin)) {
             destination = border.get(border.size() - 1);
         }
-        place(kind, strategy, origin, destination);
+        return place(kind, strategy, origin, destination).isPresent();
     }
 
     private Optional<Vehicle> place(VehicleKind kind, RouteStrategy strategy, Intersection origin,

@@ -99,6 +99,26 @@ class VehicleSpawnerTest {
     }
 
     @Test
+    void spawnsOneBatchPerInterval() {
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_PARALLEL, "false");
+        props.setProperty(SimConfig.SPAWN_INTERVAL_MILLIS, "10000");
+        props.setProperty(SimConfig.SPAWN_BATCH_SIZE, "3");
+        var run = new Run(SimConfig.from(props));
+        int ticksPerInterval = 200;
+
+        // 1100 ticks = 55 s: cinco grupos completos (a los 10, 20, 30, 40 y 50 s).
+        int[] tick = {0};
+        Counts counts = run.run(1_100, r -> {
+            tick[0]++;
+            long batchesDue = tick[0] / ticksPerInterval;
+            assertTrue(r.spawner.spawned() <= 3 * batchesDue, "spawned " + r.spawner.spawned() + " at tick " + tick[0]);
+        });
+
+        assertEquals(15, counts.spawned());
+    }
+
+    @Test
     void kindProportionsApproachWeights() {
         SimConfig cfg = SimConfig.load();
         Counts counts = new Run(cfg).run(20_000);
