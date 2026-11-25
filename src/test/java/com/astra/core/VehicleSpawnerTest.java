@@ -5,16 +5,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.graph.Intersection;
+import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleKind;
+import com.astra.routing.RouteStrategies;
+import com.astra.routing.RouteStrategy;
 import com.astra.traffic.LightController;
 import com.astra.traffic.TestLights;
 import com.astra.traffic.TrafficLight;
 import com.astra.util.MapLoader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -40,7 +49,11 @@ class VehicleSpawnerTest {
         private final LightController lights;
 
         Run(SimConfig cfg) {
-            RoadGraph graph = MapLoader.load("maps/city-3x3.json").graph();
+            this(cfg, "maps/city-3x3.json");
+        }
+
+        Run(SimConfig cfg, String mapFile) {
+            RoadGraph graph = MapLoader.load(mapFile).graph();
             lights = new LightController(graph, cfg);
             world = new WorldState(graph, cfg, lights, new IntersectionZones(graph, cfg));
             spawner = new VehicleSpawner(world, cfg);
@@ -158,5 +171,99 @@ class VehicleSpawnerTest {
                 assertFalse(origin.equals(vehicle.destination()));
             }
         });
+    }
+
+    @Test
+    void v2VehiclesGoFromAGatewayToAnotherAndLeaveThere() {
+        var run = new Run(v2Config(), V2);
+        assertTrue(run.spawner.usesGateways());
+        assertEquals(12, run.spawner.border().size());
+        assertTrue(run.spawner.border().stream().allMatch(Intersection::isGateway));
+        Map<String, Vehicle> lastSeen = new HashMap<>();
+        int[] leftAtGateway = {0};
+
+        Counts counts = run.run(2_000, r -> {
+            Map<String, Vehicle> now = new HashMap<>();
+            for (Vehicle vehicle : r.world.vehicles()) {
+                assertTrue(vehicle.origin().isGateway(), vehicle.origin().id());
+                assertTrue(vehicle.destination().isGateway(), vehicle.destination().id());
+                assertFalse(vehicle.origin().equals(vehicle.destination()));
+                now.put(vehicle.id(), vehicle);
+            }
+            // El que desaparece iba por su última vía, hacia su gateway de destino.
+            lastSeen.forEach((id, vehicle) -> {
+                if (!now.containsKey(id)) {
+                    assertEquals(vehicle.destination(), vehicle.currentRoad().to(), id);
+                    assertTrue(vehicle.nextRoad().isEmpty(), id);
+                    leftAtGateway[0]++;
+                }
+            });
+            lastSeen.clear();
+            lastSeen.putAll(now);
+        });
+
+        assertTrue(leftAtGateway[0] > 0, "no vehicle left the city");
+        assertEquals(counts.despawned(), leftAtGateway[0]);
+    }
+
+    @Test
+    void v2UsesAllTwelveGatewaysAsOrigin() {
+        var run = new Run(v2Config(), V2);
+        Set<String> origins = new HashSet<>();
+
+        run.run(5_000, r -> r.world.vehicles().forEach(vehicle -> origins.add(vehicle.origin().id())));
+
+        assertEquals(run.spawner.border().stream().map(Intersection::id).collect(Collectors.toSet()), origins);
+    }
+
+    @Test
+    void v2SameSeedGivesSameVehicles() {
+        List<String> first = spawnLog(new Run(v2Config(), V2), 1_500);
+        List<String> second = spawnLog(new Run(v2Config(), V2), 1_500);
+
+        assertFalse(first.isEmpty());
+        assertEquals(first, second);
+    }
+
+    @Test
+    void v2RoutesNeverCrossAParking() {
+        // Una playa tiene una sola vía de doble sentido: pasar por ella obliga a volver por donde se entró.
+        var run = new Run(v2Config(), V2);
+        List<Intersection> gateways = run.spawner.border();
+        for (String name : RouteStrategies.NAMES) {
+            RouteStrategy strategy = run.spawner.strategyNamed(name);
+            for (Intersection from : gateways) {
+                for (Intersection to : gateways) {
+                    if (from.equals(to)) {
+                        continue;
+                    }
+                    List<Road> route = strategy.route(run.world.graph(), from, to);
+                    assertFalse(route.isEmpty(), name + " " + from.id() + " -> " + to.id());
+                    assertTrue(route.stream().noneMatch(road -> road.to().isParking()),
+                            name + " " + from.id() + " -> " + to.id() + " crosses a parking");
+                }
+            }
+        }
+    }
+
+    private static final String V2 = "maps/city-3x3-v2.json";
+
+    private static SimConfig v2Config() {
+        var props = new Properties();
+        props.setProperty(SimConfig.ENGINE_PARALLEL, "false");
+        props.setProperty(SimConfig.SPAWN_INTERVAL_MILLIS, "500");
+        return SimConfig.from(props);
+    }
+
+    // Tipo, origen y destino de cada vehículo en el orden en que nace; sin el id, cuyo contador es global.
+    private static List<String> spawnLog(Run run, int ticks) {
+        List<String> log = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        run.run(ticks, r -> r.world.vehicles().forEach(vehicle -> {
+            if (seen.add(vehicle.id())) {
+                log.add(vehicle.kind() + " " + vehicle.origin().id() + "->" + vehicle.destination().id());
+            }
+        }));
+        return log;
     }
 }

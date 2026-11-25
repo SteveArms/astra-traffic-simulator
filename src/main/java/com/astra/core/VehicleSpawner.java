@@ -1,6 +1,7 @@
 package com.astra.core;
 
 import com.astra.graph.Intersection;
+import com.astra.graph.NodeKind;
 import com.astra.graph.Road;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleFactory;
@@ -19,9 +20,10 @@ import java.util.Optional;
 import java.util.Random;
 
 /**
- * Genera vehículos entre intersecciones del borde del mapa: {@code spawn.batchSize} por intervalo de tiempo simulado,
- * sin superar {@code vehicle.maxCount}. No tiene hilos propios y usa una sola semilla: con la misma configuración, la
- * secuencia es siempre la misma.
+ * Genera vehículos entre los extremos del mapa: {@code spawn.batchSize} por intervalo de tiempo simulado, sin superar
+ * {@code vehicle.maxCount}. Si el mapa tiene nodos {@link NodeKind#GATEWAY}, los extremos son solo esos (entran y
+ * salen de la ciudad por ellos); si no, las intersecciones del borde. No tiene hilos propios y usa una sola semilla:
+ * con la misma configuración, la secuencia es siempre la misma.
  *
  * @implNote Solo astra-engine lo usa, dentro del tick; antes de iniciar el motor puede usarse desde cualquier hilo.
  */
@@ -37,6 +39,7 @@ public final class VehicleSpawner {
     private final int batchSize;
     private final int maxCount;
     private final List<Intersection> border;
+    private final boolean usesGateways;
     private final Map<VehicleKind, Double> kindWeights;
     private final Map<RouteStrategy, Double> strategyWeights;
     private final Map<VehicleKind, Integer> spawnedByKind = new EnumMap<>(VehicleKind.class);
@@ -52,9 +55,10 @@ public final class VehicleSpawner {
         this.intervalSeconds = cfg.spawnIntervalMillis().toMillis() / MILLIS_PER_SECOND;
         this.batchSize = cfg.spawnBatchSize();
         this.maxCount = cfg.vehicleMaxCount();
-        this.border = borderOf(world.graph().vertices());
+        this.border = endpointsOf(world.graph().vertices());
+        this.usesGateways = border.stream().anyMatch(Intersection::isGateway);
         if (border.size() < 2) {
-            throw new IllegalStateException("The map needs at least two border intersections to spawn vehicles");
+            throw new IllegalStateException("The map needs at least two gateways or border intersections");
         }
         this.kindWeights = cfg.spawnWeights();
         var strategies = new LinkedHashMap<RouteStrategy, Double>();
@@ -97,8 +101,8 @@ public final class VehicleSpawner {
     }
 
     /**
-     * Genera ahora un vehículo pedido por el usuario. Un extremo {@code null} se sortea entre los bordes (distinto
-     * del otro extremo).
+     * Genera ahora un vehículo pedido por el usuario. Un extremo {@code null} se sortea entre los extremos del mapa
+     * (distinto del otro extremo).
      *
      * @return vacío si se alcanzó {@code vehicle.maxCount}, no hay ruta (incluye origen = destino) o no hay espacio
      * @implNote Called from astra-engine (SpawnVehicleCmd), or before the engine starts.
@@ -124,9 +128,14 @@ public final class VehicleSpawner {
         return RouteStrategies.byName(name, world::currentOccupancy, cfg, random);
     }
 
-    /** Intersecciones de entrada y salida, ordenadas por id. */
+    /** Nodos de entrada y salida, ordenados por id: los gateways si el mapa los tiene, si no el borde. */
     public List<Intersection> border() {
         return border;
+    }
+
+    /** {@code true} si los vehículos entran y salen solo por nodos GATEWAY. */
+    public boolean usesGateways() {
+        return usesGateways;
     }
 
     // Si el par elegido no tiene camino o espacio, se descarta y el próximo tick sortea otro: así un origen
@@ -188,9 +197,17 @@ public final class VehicleSpawner {
         return last;
     }
 
-    private static List<Intersection> borderOf(Iterable<Intersection> vertices) {
+    private static List<Intersection> endpointsOf(Iterable<Intersection> vertices) {
         List<Intersection> all = new ArrayList<>();
         vertices.forEach(all::add);
+        List<Intersection> gateways = all.stream()
+                .filter(Intersection::isGateway)
+                .sorted(Comparator.comparing(Intersection::id))
+                .toList();
+        if (!gateways.isEmpty()) {
+            return gateways;
+        }
+        // Mapa sin gateways (city-3x3.json): las intersecciones del rectángulo exterior.
         double minX = all.stream().mapToDouble(Intersection::x).min().orElse(0);
         double maxX = all.stream().mapToDouble(Intersection::x).max().orElse(0);
         double minY = all.stream().mapToDouble(Intersection::y).min().orElse(0);
