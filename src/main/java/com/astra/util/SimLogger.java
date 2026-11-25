@@ -46,7 +46,9 @@ public final class SimLogger {
     private SimLogger() {
     }
 
-    /** Abre el archivo y arranca el hilo escritor; si ya estaba iniciado, cierra el anterior. Reinicia los contadores. */
+    /**
+     * Abre el archivo y arranca el hilo escritor; si ya estaba iniciado, cierra el anterior. Reinicia los contadores.
+     */
     public static void init(LogSettings settings) {
         Objects.requireNonNull(settings, "settings");
         synchronized (LIFECYCLE) {
