@@ -51,15 +51,10 @@ public final class CityRenderer extends StackPane {
     private static final double INTERSECTION_SIZE = 24;
     private static final double LABEL_GAP = 4;
 
-    private static final double CAR_WIDTH = 6;
-    private static final double BUS_WIDTH = 7;
-    private static final double AMBULANCE_WIDTH = 7;
-    private static final double AMBULANCE_STRIPE_WIDTH = 3;
     // Dos destellos por segundo, por debajo del umbral de 3 por segundo. Sigue el tiempo simulado: con la
     // simulación en pausa deja de parpadear.
     private static final long AMBULANCE_BLINK_MILLIS = 250;
     private static final double MILLIS_PER_SECOND = 1_000.0;
-    private static final double VEHICLE_RIGHT_OFFSET = 5;
     private static final double OUTLINE_WIDTH = 1;
 
     private static final double LIGHT_RADIUS = 4;
@@ -98,11 +93,6 @@ public final class CityRenderer extends StackPane {
     private static final Color LABEL_TEXT = Color.web("#9CA3AF");
     private static final Color HUD_SURFACE = Color.web("#1F2937");
     private static final Color HUD_TEXT = Color.web("#F3F4F6");
-    private static final Color CAR = Color.web("#93C5FD");
-    private static final Color BUS = Color.web("#FCD34D");
-    private static final Color AMBULANCE = Color.web("#F9FAFB");
-    // 4.6:1 contra el blanco de la ambulancia.
-    private static final Color AMBULANCE_STRIPE = Color.web("#DC2626");
     private static final Color LIGHT_GREEN = Color.web("#4ADE80");
     private static final Color LIGHT_YELLOW = Color.web("#FACC15");
     private static final Color LIGHT_RED = Color.web("#F87171");
@@ -254,9 +244,9 @@ public final class CityRenderer extends StackPane {
                 drawLock(gc, mutex);
             }
         }
-        boolean stripeOn = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / AMBULANCE_BLINK_MILLIS) % 2 == 0;
+        boolean sirenRed = (long) (snapshot.simTimeSeconds() * MILLIS_PER_SECOND / AMBULANCE_BLINK_MILLIS) % 2 == 0;
         for (VehicleView vehicle : snapshot.vehicles()) {
-            drawVehicle(gc, vehicle, stripeOn);
+            VehiclePainter.paint(gc, vehicle, sirenRed);
         }
         gc.restore();
         drawHud(gc, snapshot);
@@ -400,45 +390,6 @@ public final class CityRenderer extends StackPane {
             case GREEN -> LIGHT_GREEN;
             case YELLOW -> LIGHT_YELLOW;
             case RED -> LIGHT_RED;
-        };
-    }
-
-    private void drawVehicle(GraphicsContext gc, VehicleView vehicle, boolean stripeOn) {
-        double heading = vehicle.headingRad();
-        // Normal derecha con y hacia abajo.
-        double x = vehicle.x() - Math.sin(heading) * VEHICLE_RIGHT_OFFSET;
-        double y = vehicle.y() + Math.cos(heading) * VEHICLE_RIGHT_OFFSET;
-        gc.save();
-        gc.translate(x, y);
-        gc.rotate(Math.toDegrees(heading));
-        gc.setFill(colorOf(vehicle.kind()));
-        // (x, y) es el parachoques delantero: el cuerpo se extiende hacia atrás.
-        double length = vehicle.length();
-        double width = widthOf(vehicle.kind());
-        gc.fillRect(-length, -width / 2, length, width);
-        if (vehicle.kind() == VehicleKind.AMBULANCE && stripeOn) {
-            gc.setFill(AMBULANCE_STRIPE);
-            gc.fillRect(-(length + AMBULANCE_STRIPE_WIDTH) / 2, -width / 2, AMBULANCE_STRIPE_WIDTH, width);
-        }
-        gc.setStroke(OUTLINE);
-        gc.setLineWidth(OUTLINE_WIDTH);
-        gc.strokeRect(-length, -width / 2, length, width);
-        gc.restore();
-    }
-
-    private static double widthOf(VehicleKind kind) {
-        return switch (kind) {
-            case CAR -> CAR_WIDTH;
-            case BUS -> BUS_WIDTH;
-            case AMBULANCE -> AMBULANCE_WIDTH;
-        };
-    }
-
-    private static Color colorOf(VehicleKind kind) {
-        return switch (kind) {
-            case CAR -> CAR;
-            case BUS -> BUS;
-            case AMBULANCE -> AMBULANCE;
         };
     }
 
