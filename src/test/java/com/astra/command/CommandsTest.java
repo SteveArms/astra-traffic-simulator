@@ -207,6 +207,33 @@ class CommandsTest {
     }
 
     @Test
+    void spawnOnV2MapOnlyAcceptsGatewaysAsEndpoints() {
+        var props = new Properties();
+        props.setProperty("spawn.intervalMillis", "3600000");
+        var cfg = SimConfig.from(props);
+        RoadGraph graph = MapLoader.load("maps/city-3x3-v2.json").graph();
+        var world = new WorldState(graph, cfg, new LightController(graph, cfg), new IntersectionZones(graph, cfg));
+        var v2Bus = new CommandBus();
+        var v2 = new SimulationEngine(cfg, world, new VehicleSpawner(world, cfg), v2Bus);
+        try {
+            v2Bus.submit(Commands.spawn(VehicleKind.CAR, "SHORTEST", "I00", "G-S2"));
+            v2Bus.submit(Commands.spawn(VehicleKind.CAR, "SHORTEST", "G-N0", "P00"));
+            v2Bus.submit(Commands.spawn(VehicleKind.CAR, "SHORTEST", "G-N0", "G-S2"));
+            v2Bus.submit(Commands.spawn(VehicleKind.BUS, "RANDOM"));
+            v2.step();
+
+            assertEquals(2, v2Bus.ignoredCount());
+            assertTrue(v2Bus.recentHistory().get(0).contains("I00 is not a gateway"), v2Bus.recentHistory().toString());
+            assertTrue(v2Bus.recentHistory().get(1).contains("P00 is not a gateway"), v2Bus.recentHistory().toString());
+            assertEquals(2, world.vehicleCount());
+            assertTrue(world.vehicles().stream()
+                    .allMatch(v -> v.origin().isGateway() && v.destination().isGateway()));
+        } finally {
+            v2.stop();
+        }
+    }
+
+    @Test
     void allCommandsRunOnEngineThread() {
         List<Command> all = List.of(Commands.pause(), Commands.step(2), Commands.speed(0.5),
                 Commands.spawn(VehicleKind.CAR, "LEAST_CONGESTED", "I00", "I02"),
