@@ -13,6 +13,10 @@ import java.util.Optional;
  * Vehículo que recorre una ruta de vías consecutivas de {@code origin} a {@code destination}.
  * {@code offset} es la posición del parachoques delantero sobre la vía actual.
  *
+ * <p>Un viaje puede tener varios tramos: {@code destination} es el final del tramo en curso y
+ * {@link #finalDestination()} el gateway por el que sale de la ciudad. Un viaje {@link TripPurpose#PARK} va primero a
+ * una playa y, al salir de ella, {@link #startLeg} le da el tramo hasta su destino final.
+ *
  * @implNote Solo astra-engine modifica su estado; la vista usa {@link #toView()}.
  */
 public abstract class Vehicle {
@@ -25,7 +29,9 @@ public abstract class Vehicle {
     private final VehicleSpec spec;
     private final RouteStrategy strategy;
     private final Intersection origin;
-    private final Intersection destination;
+    private final TripPurpose purpose;
+    private final Intersection finalDestination;
+    private Intersection destination;
 
     private List<Road> route = List.of();
     private int roadIndex;
@@ -38,12 +44,23 @@ public abstract class Vehicle {
     /** La ruta se asigna después con {@link #assignRoute}; normalmente lo hace {@link VehicleFactory}. */
     protected Vehicle(String id, VehicleKind kind, VehicleSpec spec, RouteStrategy strategy, Intersection origin,
             Intersection destination) {
+        this(id, kind, spec, strategy, origin, destination, TripPurpose.THROUGH, destination);
+    }
+
+    /** @param finalDestination dónde termina el viaje; en un THROUGH es el mismo {@code destination} */
+    protected Vehicle(String id, VehicleKind kind, VehicleSpec spec, RouteStrategy strategy, Intersection origin,
+            Intersection destination, TripPurpose purpose, Intersection finalDestination) {
         this.id = Objects.requireNonNull(id, "id");
         this.kind = Objects.requireNonNull(kind, "kind");
         this.spec = Objects.requireNonNull(spec, "spec");
         this.strategy = Objects.requireNonNull(strategy, "strategy");
         this.origin = Objects.requireNonNull(origin, "origin");
         this.destination = Objects.requireNonNull(destination, "destination");
+        this.purpose = Objects.requireNonNull(purpose, "purpose");
+        this.finalDestination = Objects.requireNonNull(finalDestination, "finalDestination");
+        if (purpose == TripPurpose.THROUGH && !finalDestination.equals(destination)) {
+            throw new IllegalArgumentException("A THROUGH trip of " + id + " ends at its destination");
+        }
     }
 
     /** Reemplaza la ruta y vuelve al inicio; debe ir de {@code origin} a {@code destination}. */
@@ -56,6 +73,38 @@ public abstract class Vehicle {
         route = copy;
         roadIndex = 0;
         offset = 0;
+        finished = false;
+    }
+
+    /**
+     * Empieza un tramo nuevo desde donde terminó el anterior (el final de la vía actual), con su destino en el final
+     * de {@code leg}. Lo usa una playa para mandar al vehículo a otra playa, a un gateway o, al salir, a su destino
+     * final.
+     *
+     * @throws IllegalArgumentException si el tramo está vacío, no es conexo o no empieza donde está el vehículo
+     * @implNote Called from astra-engine (fase C).
+     */
+    public void startLeg(List<Road> leg) {
+        var copy = List.copyOf(leg);
+        if (copy.isEmpty()) {
+            throw new IllegalArgumentException("Leg of " + id + " must not be empty");
+        }
+        Intersection here = currentRoad().to();
+        if (!copy.get(0).from().equals(here)) {
+            throw new IllegalArgumentException("Leg of " + id + " must start at " + here.id());
+        }
+        Intersection previous = destination;
+        destination = copy.get(copy.size() - 1).to();
+        try {
+            requireConnected(copy);
+        } catch (IllegalArgumentException e) {
+            destination = previous;
+            throw e;
+        }
+        route = copy;
+        roadIndex = 0;
+        offset = 0;
+        speed = 0;
         finished = false;
     }
 
@@ -188,8 +237,18 @@ public abstract class Vehicle {
         return origin;
     }
 
+    /** Final del tramo en curso. */
     public Intersection destination() {
         return destination;
+    }
+
+    public TripPurpose purpose() {
+        return purpose;
+    }
+
+    /** Gateway por el que el vehículo sale de la ciudad al terminar su viaje. */
+    public Intersection finalDestination() {
+        return finalDestination;
     }
 
     public List<Road> route() {

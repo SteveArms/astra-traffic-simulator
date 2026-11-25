@@ -254,6 +254,61 @@ class VehicleTest {
         assertFalse(car(ab).hasEmergencyPriority());
     }
 
+    @Test
+    void throughTripEndsAtItsDestination() {
+        var car = car(ab, bc);
+
+        assertEquals(TripPurpose.THROUGH, car.purpose());
+        assertEquals(c, car.finalDestination());
+        assertThrows(IllegalArgumentException.class,
+                () -> new Car(SPEC, SHORTEST, a, c, TripPurpose.THROUGH, d));
+    }
+
+    @Test
+    void parkTripStartsANewLegWhereTheFirstEnded() {
+        var car = new Car(new VehicleSpec(20, INSTANT_ACCELERATION, DECELERATION, LENGTH), SHORTEST, a, b,
+                TripPurpose.PARK, d);
+        car.assignRoute(List.of(ab));
+        while (!car.isFinished()) {
+            car.update(1, FREE);
+        }
+        assertEquals(b, car.destination());
+
+        car.startLeg(List.of(bd));
+
+        assertFalse(car.isFinished());
+        assertEquals(d, car.destination());
+        assertEquals(d, car.finalDestination());
+        assertEquals(a, car.origin());
+        assertEquals(bd, car.currentRoad());
+        assertEquals(0, car.offset(), DELTA);
+        assertEquals(0, car.speed(), DELTA);
+    }
+
+    @Test
+    void legMustStartWhereTheVehicleIs() {
+        var car = car(ab);
+
+        assertThrows(IllegalArgumentException.class, () -> car.startLeg(List.of(cb)));
+        assertThrows(IllegalArgumentException.class, () -> car.startLeg(List.of()));
+        assertThrows(IllegalArgumentException.class, () -> car.startLeg(List.of(bd, bc)));
+        assertEquals(b, car.destination(), "a rejected leg keeps the old destination");
+    }
+
+    @Test
+    void onlyCarsCanPark() {
+        var factory = new VehicleFactory(kind -> SPEC);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> factory.create(VehicleKind.BUS, SHORTEST, List.of(ab), TripPurpose.PARK, d));
+        assertThrows(IllegalArgumentException.class,
+                () -> factory.create(VehicleKind.CAR, SHORTEST, List.of(ab), TripPurpose.PARK, null));
+        Vehicle parker = factory.create(VehicleKind.CAR, SHORTEST, List.of(ab), TripPurpose.PARK, d);
+        assertEquals(TripPurpose.PARK, parker.purpose());
+        assertEquals(d, parker.finalDestination());
+        assertEquals(b, parker.destination());
+    }
+
     private static Car car(Road... route) {
         return car(SPEC, SHORTEST, route);
     }

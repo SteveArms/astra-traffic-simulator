@@ -8,6 +8,7 @@ import com.astra.graph.RoadGraph;
 import com.astra.model.Vehicle;
 import com.astra.model.VehicleKind;
 import com.astra.model.VehicleView;
+import com.astra.parking.ParkingDirectory;
 import com.astra.routing.RoadOccupancy;
 import com.astra.traffic.Axis;
 import com.astra.traffic.LightColor;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,6 +61,10 @@ import java.util.function.IntConsumer;
  * cruzar, sale de la cola. Al salir del box la libera. Los vehículos que nacen en el centro de una intersección no
  * cruzan desde ningún acceso, así que no pasan por Ricart-Agrawala.
  *
+ * <p>Si el mapa tiene playas, un vehículo que termina su tramo en una lo entrega a {@link ParkingService} en la fase
+ * C: si estaciona sale de la lista activa (sin contar como salido), si la playa está llena espera en la entrada o
+ * sigue con otro tramo, y al cumplirse su estancia vuelve a la calle desde la playa.
+ *
  * @implNote Su único dueño es astra-engine; los demás hilos usan {@link WorldSnapshot} o {@link #queueLength}.
  */
 public final class WorldState implements QueueSensor {
@@ -88,6 +94,7 @@ public final class WorldState implements QueueSensor {
     private final Map<String, Road> raCrossings = new ConcurrentHashMap<>();
     // Largo de vía que ocupa un auto con su hueco: base de la capacidad aproximada de cada vía.
     private final double carFootprint;
+    private final double carLength;
     private final List<Vehicle> vehicles = new ArrayList<>();
     // Concurrentes: en la fase A cada worker escribe la entrada de sus propios vehículos.
     private final Map<String, IntersectionZone> held = new ConcurrentHashMap<>();
@@ -103,6 +110,8 @@ public final class WorldState implements QueueSensor {
     private final AtomicReference<RoadOccupancy> occupancy = new AtomicReference<>(RoadOccupancy.EMPTY);
     private final AtomicReference<Map<Intersection, Map<Axis, Integer>>> queues = new AtomicReference<>(Map.of());
     private final SimStats stats;
+    // null: el mapa no tiene playas.
+    private final ParkingService parking;
     private long spawned;
     private long despawned;
 
@@ -132,7 +141,10 @@ public final class WorldState implements QueueSensor {
         requireMutexesFor(cfg.mutexMode());
         this.mutexMode = cfg.mutexMode();
         this.stats = new SimStats(cfg);
+        boolean hasParking = graph.vertices().stream().anyMatch(Intersection::isParking);
+        this.parking = hasParking ? new ParkingService(graph, cfg, stats) : null;
         this.carFootprint = cfg.minGap() + cfg.specFor(VehicleKind.CAR).length();
+        this.carLength = cfg.specFor(VehicleKind.CAR).length();
         this.updater = cfg.engineParallel()
                 ? new ParallelUpdater(cfg.engineWorkers(), cfg.tickMillis().multipliedBy(PHASE_TIMEOUT_TICKS))
                 : null;
@@ -173,6 +185,16 @@ public final class WorldState implements QueueSensor {
 
     public Optional<VehicleSpawner> spawner() {
         return Optional.ofNullable(spawner);
+    }
+
+    /** Registro de playas; vacío si el mapa no tiene. */
+    public Optional<ParkingDirectory> parkingDirectory() {
+        return parking == null ? Optional.empty() : Optional.of(parking.directory());
+    }
+
+    /** Vehículos estacionados (fuera de la lista activa). @implNote Called from astra-engine or tests. */
+    public int parkedCount() {
+        return parking == null ? 0 : parking.parkedCount();
     }
 
     /** @implNote Safe to call from any thread. */
@@ -230,6 +252,11 @@ public final class WorldState implements QueueSensor {
     public void addVehicle(Vehicle vehicle) {
         vehicles.add(Objects.requireNonNull(vehicle, "vehicle"));
         spawned++;
+        enterStart(vehicle);
+    }
+
+    // Arranca en el centro de su primer nodo: intenta reservar esa zona hasta salir del box.
+    private void enterStart(Vehicle vehicle) {
         indexDirty = true;
         IntersectionZone start = zones.zoneOf(vehicle.currentRoad().from());
         if (start.tryEnter(vehicle.id())) {
@@ -366,20 +393,35 @@ public final class WorldState implements QueueSensor {
     // Fase C. @implNote Called from astra-engine.
     private void commit(Road[] before, double dtSeconds) {
         stats.advance(dtSeconds);
+        double now = stats.simTimeSeconds();
+        Set<Vehicle> gone = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int i = 0; i < before.length; i++) {
             Vehicle vehicle = vehicles.get(i);
             releaseIfClear(vehicle);
-            if (vehicle.isFinished()) {
+            if (vehicle.isFinished() && parking != null && vehicle.destination().isParking()) {
+                arriveAtParking(vehicle, now, gone);
+            } else if (vehicle.isFinished()) {
                 releaseAll(vehicle);
                 despawned++;
                 stats.recordArrival(vehicle.kind(), vehicle.tripSeconds(), vehicle.waitSeconds());
+                if (parking != null) {
+                    parking.forget(vehicle.id());
+                }
+                gone.add(vehicle);
             } else if (!vehicle.currentRoad().equals(before[i]) && vehicle.strategy().isAdaptive()) {
                 vehicle.reroute(graph, vehicle.currentRoad().to());
                 // Una petición pendiente para la siguiente intersección se pidió con la ruta vieja.
                 leaveQueue(vehicle.id(), vehicle.currentRoad().to());
             }
         }
-        vehicles.removeIf(Vehicle::isFinished);
+        vehicles.removeIf(gone::contains);
+        if (parking != null) {
+            for (Vehicle back : parking.departures(now, this::canLeaveParking)) {
+                vehicles.add(back);
+                enterStart(back);
+            }
+            parking.sampleOccupancy(dtSeconds);
+        }
         if (spawner != null) {
             spawner.update(dtSeconds);
         }
@@ -466,6 +508,28 @@ public final class WorldState implements QueueSensor {
         }
         holdZone(vehicle, zone);
         return vehicle.remainingOnRoad() + space;
+    }
+
+    // Fase C. Estacionado: deja la calle. Redirigido: arranca su tramo nuevo desde el centro de la playa.
+    private void arriveAtParking(Vehicle vehicle, double now, Set<Vehicle> gone) {
+        switch (parking.arrive(vehicle, now)) {
+            case PARKED -> {
+                releaseAll(vehicle);
+                gone.add(vehicle);
+            }
+            case REDIRECTED -> {
+                releaseAll(vehicle);
+                enterStart(vehicle);
+            }
+            case WAITING -> {
+                // Sigue detenido en la entrada, con su zona: no está sobre la calle principal.
+            }
+        }
+    }
+
+    // Igual que al generar: sitio al inicio de la vía y en la zona de la playa. Solo estacionan autos.
+    private boolean canLeaveParking(Road first) {
+        return hasRoomAtStart(first, carLength) && !zones.zoneOf(first.from()).isFull();
     }
 
     // Fase A: encola una sola vez y deja pasar solo con la sección. Toca solo las entradas de su propio vehículo.

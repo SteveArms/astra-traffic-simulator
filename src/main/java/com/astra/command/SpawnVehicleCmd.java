@@ -6,12 +6,14 @@ import com.astra.graph.Intersection;
 import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.routing.RouteStrategies;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Genera un vehículo a pedido. {@code originId} y {@code destId} pueden ser {@code null}: se sortean entre los
- * bordes del mapa. Se ignora (y queda en el historial) si un id no existe o no hay spawner, ruta o espacio.
+ * extremos del mapa. Si el mapa tiene gateways, un extremo explícito debe ser uno. Se ignora (y queda en el
+ * historial) si un id no existe o no es un gateway válido, o si no hay spawner, ruta o espacio.
  *
  * @param strategyName se guarda normalizado ({@code "random"} → {@code "RANDOM"})
  */
@@ -46,6 +48,14 @@ public record SpawnVehicleCmd(VehicleKind kind, String strategyName, String orig
             return;
         }
         VehicleSpawner s = spawner.get();
+        if (s.usesGateways()) {
+            for (Optional<Intersection> end : List.of(origin, dest)) {
+                if (end.isPresent() && !end.get().isGateway()) {
+                    bus.markIgnored(end.get().id() + " is not a gateway");
+                    return;
+                }
+            }
+        }
         if (s.spawnNow(kind, s.strategyNamed(strategyName), origin.orElse(null), dest.orElse(null)).isEmpty()) {
             bus.markIgnored("no room, no route or vehicle limit reached");
         }

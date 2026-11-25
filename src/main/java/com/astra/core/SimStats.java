@@ -36,6 +36,11 @@ public final class SimStats {
     private double waitSum;
     private int currentQueue;
     private int maxQueue;
+    private long parked;
+    private double searchSum;
+    private long parkingRejections;
+    private double occupancyTime;
+    private double occupancyWeighted;
 
     public SimStats(SimConfig cfg) {
         this(cfg.statsThroughputWindow(), cfg.statsSampleInterval(), cfg.statsSeriesCapacity());
@@ -68,6 +73,25 @@ public final class SimStats {
         arrivalTimes.addLast(now);
     }
 
+    /** Un vehículo estacionó tras buscar {@code searchSeconds} desde su primer intento. */
+    public void recordParked(double searchSeconds) {
+        parked++;
+        searchSum += searchSeconds;
+    }
+
+    /** Un vehículo llegó a una playa llena o cerrada. */
+    public void recordParkingRejection() {
+        parkingRejections++;
+    }
+
+    /** Ocupación de todas las playas ({@code occupied / capacity}) durante los últimos {@code dtSeconds}. */
+    public void sampleParkingOccupancy(int occupied, int capacity, double dtSeconds) {
+        if (capacity > 0 && dtSeconds > 0) {
+            occupancyWeighted += (double) occupied / capacity * dtSeconds;
+            occupancyTime += dtSeconds;
+        }
+    }
+
     /** Cierra el tick: actualiza colas, descarta llegadas fuera de la ventana y agrega los puntos que tocan. */
     public void sample(int activeVehicles, int totalQueue) {
         currentQueue = totalQueue;
@@ -92,7 +116,8 @@ public final class SimStats {
         Map<VehicleKind, Double> byKind = new EnumMap<>(VehicleKind.class);
         arrivedByKind.forEach((kind, count) -> byKind.put(kind, waitByKind.get(kind) / count));
         return new StatsView(arrived == 0 ? 0 : tripSum / arrived, avgWait(), byKind, throughputPerMin(), arrived,
-                currentQueue, maxQueue, series.stream().toList());
+                currentQueue, maxQueue, series.stream().toList(), parked == 0 ? 0 : searchSum / parked,
+                parkingRejections, occupancyTime == 0 ? 0 : occupancyWeighted / occupancyTime);
     }
 
     private double avgWait() {

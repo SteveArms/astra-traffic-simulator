@@ -39,7 +39,7 @@ estructura, concurrencia, patrones, estilo, Git) están en **AGENTS.md** y se im
   español), un cambio lógico por commit y que cada uno compile.
 - PROHIBIDO: `git push`, abrir PR, `git pull`, `git merge`, `git rebase`, `--force` y `--amend` sobre
   commits que no sean de la tarea actual. El push y los PR los hace el usuario.
-- Al terminar, muestra `git log --oneline develop..HEAD` y `git status`.
+- Al terminar, muestra `git log --oneline main..HEAD` y `git status`.
 
 ## Errores frecuentes a evitar
 

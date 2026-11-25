@@ -11,6 +11,7 @@ import com.astra.core.WorldState;
 import com.astra.distributed.IntersectionMutex;
 import com.astra.distributed.SimulatedNetwork;
 import com.astra.graph.Intersection;
+import com.astra.graph.NodeKind;
 import com.astra.traffic.LightController;
 import com.astra.traffic.TrafficLight;
 import com.astra.util.MapLoader;
@@ -32,7 +33,7 @@ public final class AstraApp extends Application {
     private static final double WINDOW_WIDTH = 1280;
     private static final double WINDOW_HEIGHT = 760;
     private static final double CONTROL_PANEL_WIDTH = 260;
-    private static final double STATS_PANEL_WIDTH = 300;
+    private static final double STATS_PANEL_WIDTH = 320;
 
     private LightController lights;
     private SimulatedNetwork network;
@@ -56,16 +57,19 @@ public final class AstraApp extends Application {
         var bus = new CommandBus();
         engine = new SimulationEngine(config, world, new VehicleSpawner(world, config), bus, control);
 
+        // Solo cruces con semáforo: los gateways, JUNCTION y playas no se pueden forzar.
         List<String> lightIds = lights.lights().stream()
                 .map(TrafficLight::intersection)
+                .filter(at -> at.kind() == NodeKind.INTERSECTION)
                 .map(Intersection::id)
                 .sorted()
                 .toList();
-        renderer = new CityRenderer(map.graph(), engine::latestSnapshot, bus);
+        renderer = new CityRenderer(map.graph(), map.bounds(), engine::latestSnapshot, bus);
         controlPanel = new ControlPanel(bus, engine::latestSnapshot, lightIds);
         statsPanel = new StatsPanel(engine::latestSnapshot);
         renderer.setOnIntersectionSelected(controlPanel::selectIntersection);
         controlPanel.setOnIntersectionChosen(renderer::select);
+        controlPanel.setOnShowLabelsChanged(renderer::setShowLabels);
         if (!lightIds.isEmpty()) {
             renderer.select(lightIds.get(0));
         }
@@ -81,6 +85,8 @@ public final class AstraApp extends Application {
         controlPanel.installShortcuts(scene);
         stage.setTitle(TITLE.formatted(map.name()));
         stage.setScene(scene);
+        // A toda la pantalla: la ciudad se escala para llenar el espacio que dejan los paneles.
+        stage.setMaximized(true);
         stage.show();
 
         network.start();

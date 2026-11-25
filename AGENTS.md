@@ -69,7 +69,7 @@ astra-traffic-simulator/
     │       ├── app/          AstraApp, MainController
     │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, PauseGate,
     │       │                 SimConfig, VehicleSpawner, ParallelUpdater
-    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, Road, RoadGraph
+    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, NodeKind, Road, RoadGraph
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
     │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
     │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
@@ -83,10 +83,13 @@ astra-traffic-simulator/
     │       ├── events/       SimEvent, EventQueue
     │       ├── distributed/  LamportClock, Request, Message, SimulatedNetwork,
     │       │                 RicartAgrawalaNode, IntersectionMutex
+    │       ├── parking/      ResourcePool<T>, ParkingLot, ParkingDirectory, ParkingSearchStrategy,
+    │       │                 NearestAlternative/WaitAtEntrance/GiveUpStrategy, ParkingSearchPolicy
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel
     │       └── util/         MapLoader, SimLogger
     ├── main/resources/com/astra/
-    │   ├── maps/city-3x3.json
+    │   ├── maps/city-3x3.json      (mapa original; lo usan los tests)
+    │   ├── maps/city-3x3-v2.json   (mapa por defecto: gateways y playas)
     │   ├── css/astra.css
     │   └── config.properties
     └── test/java/com/astra/  (espejo de los paquetes)
@@ -99,6 +102,7 @@ Reglas de dependencia entre paquetes:
   (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
 - `graph` no conoce `model` ni `traffic`: es genérico.
 - `model` solo depende de `graph` y `routing`.
+- `parking` depende de `graph` y `model`, nunca de `core`: recibe sus parámetros por `ParkingSettings`.
 
 ---
 
@@ -181,6 +185,10 @@ public class Dijkstra<V, E extends Edge<V>> {
 - `routing` solo depende de `graph`: recibe sus parámetros a través de `RoutingSettings`
   (`SimConfig` la implementa) y la ocupación de las vías a través de `RoadOccupancy`.
 - Una nueva forma de enrutar = una nueva `RouteStrategy`. **No** meter `if` en `Vehicle`.
+- Una nueva forma de buscar estacionamiento = una nueva `ParkingSearchStrategy` (devuelve una `SearchDecision`
+  sellada: `Reroute`, `Wait` o `GiveUp`). El tope `parking.maxSearchAttempts` lo aplica `ParkingSearchPolicy`.
+- Los cajones de una playa son un `ResourcePool<String>` (`Semaphore` justo + arreglo de slots, `tryAcquire` sin
+  bloquear). Llegadas, esperas y salidas ocurren en la fase C del motor (`ParkingService`), en tiempo simulado.
 - Una nueva acción de usuario = un nuevo `Command`.
 
 ---
@@ -256,7 +264,13 @@ distributed.latencyMaxMillis=40
 distributed.seed=7
 distributed.mutex=SEMAPHORE
 distributed.grantTimeoutTicks=60
-map.file=maps/city-3x3.json
+parking.tripWeight=0.35
+parking.minStaySeconds=20
+parking.maxStaySeconds=60
+parking.searchStrategy=NEAREST_ALTERNATIVE
+parking.maxSearchAttempts=2
+parking.waitAtEntranceSeconds=8
+map.file=maps/city-3x3-v2.json
 log.file=logs/astra.log
 log.console=true
 log.level=INFO
@@ -312,6 +326,16 @@ log.level=INFO
   Se cambia en vivo con `SetMutexModeCmd`.
 - `distributed.grantTimeoutTicks`: ticks que un vehículo puede tener la sección de Ricart‑Agrawala sin lograr
   entrar a la zona; al cumplirse la suelta (`cancel`) y vuelve a encolarse.
+- `parking.*` (`ParkingSettings`): con probabilidad `parking.tripWeight` (0 a 1) un auto nuevo va a estacionar a una
+  playa al azar en vez de cruzar la ciudad (buses y ambulancias siempre cruzan). Se queda un tiempo simulado
+  sorteado entre `parking.minStaySeconds` y `parking.maxStaySeconds` y sale hacia un gateway. Si la playa está
+  llena o cerrada aplica `parking.searchStrategy`: `NEAREST_ALTERNATIVE` (la playa con lugar más cercana),
+  `WAIT_AT_ENTRANCE` (espera `parking.waitAtEntranceSeconds` en la entrada y después busca otra) o `GIVE_UP` (sale
+  por el gateway más cercano). Tras `parking.maxSearchAttempts` intentos fallidos siempre se rinde.
+- `map.file`: mapa JSON relativo a `src/main/resources/com/astra/`. Cada nodo acepta `kind` (`INTERSECTION` por
+  defecto, `GATEWAY`, `JUNCTION` o `PARKING`) y `capacity` (solo `PARKING`, >= 1); el mapa acepta
+  `"bounds": {"width", "height"}` (si falta, se calcula con el mismo margen que el contenido). Una `PARKING` o una
+  `GATEWAY` tiene exactamente una vía de doble sentido. Solo los `INTERSECTION` pueden tener semáforo.
 - `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
   ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
   escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.

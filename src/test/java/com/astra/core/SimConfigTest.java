@@ -53,12 +53,13 @@ class SimConfigTest {
         assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
-        assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals("maps/city-3x3-v2.json", config.mapFile());
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());
         assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
         assertEquals(60, config.grantTimeoutTicks());
+        assertParking(config);
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -99,12 +100,13 @@ class SimConfigTest {
         assertEquals(Map.of(VehicleKind.CAR, 0.75, VehicleKind.BUS, 0.20, VehicleKind.AMBULANCE, 0.05),
                 config.spawnWeights());
         assertEquals(Map.of("SHORTEST", 0.5, "LEAST_CONGESTED", 0.3, "RANDOM", 0.2), config.routingWeights());
-        assertEquals("maps/city-3x3.json", config.mapFile());
+        assertEquals("maps/city-3x3-v2.json", config.mapFile());
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());
         assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
         assertEquals(60, config.grantTimeoutTicks());
+        assertParking(config);
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -350,6 +352,47 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(SimConfig.LOG_LEVEL), e.getMessage());
+    }
+
+    @Test
+    void parkingKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.PARKING_TRIP_WEIGHT, "1");
+        props.setProperty(SimConfig.PARKING_MIN_STAY_SECONDS, "5");
+        props.setProperty(SimConfig.PARKING_MAX_STAY_SECONDS, "5");
+        props.setProperty(SimConfig.PARKING_SEARCH_STRATEGY, "give_up");
+        props.setProperty(SimConfig.PARKING_MAX_SEARCH_ATTEMPTS, "4");
+        props.setProperty(SimConfig.PARKING_WAIT_AT_ENTRANCE_SECONDS, "0");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(1, config.parkingTripWeight());
+        assertEquals(Duration.ofSeconds(5), config.parkingMinStay());
+        assertEquals(Duration.ofSeconds(5), config.parkingMaxStay());
+        assertEquals("GIVE_UP", config.parkingSearchStrategy());
+        assertEquals(4, config.parkingMaxSearchAttempts());
+        assertEquals(Duration.ZERO, config.parkingWaitAtEntrance());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"parking.tripWeight=1.5", "parking.tripWeight=-0.1", "parking.maxStaySeconds=10",
+        "parking.searchStrategy=TELEPORT", "parking.maxSearchAttempts=0", "parking.waitAtEntranceSeconds=-1"})
+    void invalidParkingValueThrowsWithKeyName(String entry) {
+        String key = entry.substring(0, entry.indexOf('='));
+        var props = new Properties();
+        props.setProperty(key, entry.substring(entry.indexOf('=') + 1));
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(key), e.getMessage());
+    }
+
+    private static void assertParking(SimConfig config) {
+        assertEquals(0.35, config.parkingTripWeight());
+        assertEquals(Duration.ofSeconds(20), config.parkingMinStay());
+        assertEquals(Duration.ofSeconds(60), config.parkingMaxStay());
+        assertEquals("NEAREST_ALTERNATIVE", config.parkingSearchStrategy());
+        assertEquals(2, config.parkingMaxSearchAttempts());
+        assertEquals(Duration.ofSeconds(8), config.parkingWaitAtEntrance());
     }
 
     private static void assertSpecs(SimConfig config) {

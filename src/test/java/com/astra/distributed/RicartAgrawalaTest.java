@@ -71,7 +71,7 @@ class RicartAgrawalaTest {
                         assertTrue(node.isHeld());
                         // Monitor: solo cuenta mientras está dentro; se descuenta antes de salir.
                         maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
-                        Thread.sleep(ThreadLocalRandom.current().nextInt(1, 4));
+                        holdFor(ThreadLocalRandom.current().nextInt(1, 4));
                         entries.get(node.processId()).incrementAndGet();
                         inside.decrementAndGet();
                         node.releaseCS();
@@ -175,6 +175,15 @@ class RicartAgrawalaTest {
             nodes.add(RicartAgrawalaNode.join(id, peers, network));
         }
         return nodes;
+    }
+
+    // Espera activa y no sleep: en Windows la granularidad de sleep crece si el proceso pasa a segundo plano, y
+    // 800 esperas de 1-3 ms llegaban a durar ~8 ms cada una.
+    private static void holdFor(long millis) {
+        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);
+        while (System.nanoTime() < until) {
+            Thread.onSpinWait();
+        }
     }
 
     private void awaitQuiet() throws InterruptedException {

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.graph.Intersection;
+import com.astra.graph.NodeKind;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import com.astra.util.MapLoader;
@@ -149,6 +150,39 @@ class TrafficLightTest {
         assertTrue(straight.lightAt(b).isEmpty());
         assertTrue(straight.canEnter(bc));
         assertEquals(LightColor.GREEN, straight.colorFor(bc));
+    }
+
+    @Test
+    void v2MapHasLightsOnlyOnItsNineIntersections() {
+        RoadGraph v2 = MapLoader.load("maps/city-3x3-v2.json").graph();
+
+        var lights = new LightController(v2, FAST);
+
+        assertEquals(9, lights.lights().size());
+        for (Intersection node : v2.vertices()) {
+            assertEquals(node.kind() == NodeKind.INTERSECTION, lights.lightAt(node).isPresent(), node.id());
+        }
+        // Damero entre cruces: los gateways y JUNCTION no cuentan como columnas.
+        assertEquals(new GreenState(Axis.NS), lights.lightAt(v2.findIntersection("I00").orElseThrow())
+                .orElseThrow().state());
+        assertEquals(new GreenState(Axis.EW), lights.lightAt(v2.findIntersection("I01").orElseThrow())
+                .orElseThrow().state());
+    }
+
+    @Test
+    void junctionWithBothAxesHasNoLight() {
+        // Un JUNCTION recibe la calle y la entrada de la playa (dos ejes, 3 vías) y aun así no tiene semáforo.
+        var street = new RoadGraph();
+        var a = new Intersection("A", 0, 0);
+        var j = new Intersection("J", 100, 0, NodeKind.JUNCTION, 0);
+        var b = new Intersection("B", 200, 0);
+        var p = new Intersection("P", 100, 70, NodeKind.PARKING, 5);
+        List.of(a, j, b, p).forEach(street::addVertex);
+        street.addTwoWayRoad("AJ", a, j, 10, 1);
+        street.addTwoWayRoad("JB", j, b, 10, 1);
+        street.addTwoWayRoad("JP", j, p, 10, 1);
+
+        assertTrue(new LightController(street, FAST).lightAt(j).isEmpty());
     }
 
     private Road road(String from, String to) {

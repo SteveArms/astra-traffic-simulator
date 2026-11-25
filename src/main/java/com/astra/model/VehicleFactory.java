@@ -39,7 +39,24 @@ public final class VehicleFactory {
      * @implNote Called from astra-engine, or before the engine starts.
      */
     public Vehicle create(VehicleKind kind, RouteStrategy strategy, List<Road> route) {
+        return create(kind, strategy, route, TripPurpose.THROUGH, null);
+    }
+
+    /**
+     * Con un propósito de viaje: un {@link TripPurpose#PARK} hace {@code route} hasta la playa y después irá a
+     * {@code finalDestination}. Solo los autos estacionan.
+     *
+     * @param finalDestination {@code null} en un THROUGH (es el final de la ruta)
+     * @throws IllegalArgumentException si un bus o una ambulancia pide PARK, o si un PARK no tiene destino final
+     * @implNote Called from astra-engine, or before the engine starts.
+     */
+    public Vehicle create(VehicleKind kind, RouteStrategy strategy, List<Road> route, TripPurpose purpose,
+            Intersection finalDestination) {
         Objects.requireNonNull(kind, "kind");
+        Objects.requireNonNull(purpose, "purpose");
+        if (purpose == TripPurpose.PARK && (kind != VehicleKind.CAR || finalDestination == null)) {
+            throw new IllegalArgumentException("Only cars park, and a PARK trip needs a final destination");
+        }
         Objects.requireNonNull(strategy, "strategy");
         if (route.isEmpty()) {
             throw new IllegalArgumentException("Route must not be empty");
@@ -48,7 +65,9 @@ public final class VehicleFactory {
         Intersection dest = route.get(route.size() - 1).to();
         VehicleSpec spec = specs.specFor(kind);
         Vehicle vehicle = switch (kind) {
-            case CAR -> new Car(spec, strategy, origin, dest);
+            case CAR -> purpose == TripPurpose.PARK
+                    ? new Car(spec, strategy, origin, dest, purpose, finalDestination)
+                    : new Car(spec, strategy, origin, dest);
             case BUS -> new Bus(spec, strategy, origin, dest);
             case AMBULANCE -> new Ambulance(spec, strategy, origin, dest);
         };

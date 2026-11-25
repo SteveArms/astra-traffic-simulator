@@ -1,6 +1,7 @@
 package com.astra.traffic;
 
 import com.astra.graph.Intersection;
+import com.astra.graph.NodeKind;
 import com.astra.graph.Road;
 import com.astra.graph.RoadGraph;
 import java.util.Collection;
@@ -17,7 +18,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoubleSupplier;
 
-/** Semáforos donde entran 3+ vías de los dos ejes (no en esquinas en L). Consultas desde cualquier hilo. */
+/**
+ * Semáforos solo en nodos {@link NodeKind#INTERSECTION} donde entran 3+ vías de los dos ejes (no en esquinas en L);
+ * los GATEWAY, JUNCTION y PARKING nunca tienen. Consultas desde cualquier hilo.
+ */
 public final class LightController {
 
     public static final String THREAD_PREFIX = "astra-lights-";
@@ -55,10 +59,14 @@ public final class LightController {
             incomingCount.merge(road.to(), 1, Integer::sum);
         }
 
-        List<Double> columns = sortedUnique(graph.vertices().stream().map(Intersection::x).toList());
-        List<Double> rows = sortedUnique(graph.vertices().stream().map(Intersection::y).toList());
+        // El damero se cuenta solo entre cruces: los gateways y los JUNCTION a mitad de cuadra no son columnas.
+        List<Intersection> crossings = graph.vertices().stream()
+                .filter(i -> i.kind() == NodeKind.INTERSECTION)
+                .toList();
+        List<Double> columns = sortedUnique(crossings.stream().map(Intersection::x).toList());
+        List<Double> rows = sortedUnique(crossings.stream().map(Intersection::y).toList());
         Map<Intersection, TrafficLight> created = new HashMap<>();
-        for (Intersection intersection : graph.vertices()) {
+        for (Intersection intersection : crossings) {
             boolean bothAxes = incomingAxes.getOrDefault(intersection, Set.of()).size() == Axis.values().length;
             // En una esquina en L (2 vías) los flujos no se cruzan: basta la zona.
             if (bothAxes && incomingCount.getOrDefault(intersection, 0) >= MIN_INCOMING_FOR_LIGHT) {
