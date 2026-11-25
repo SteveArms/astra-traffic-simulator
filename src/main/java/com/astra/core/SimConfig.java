@@ -86,6 +86,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     static final String DISTRIBUTED_LATENCY_MIN_MILLIS = "distributed.latencyMinMillis";
     static final String DISTRIBUTED_LATENCY_MAX_MILLIS = "distributed.latencyMaxMillis";
     static final String DISTRIBUTED_SEED = "distributed.seed";
+    static final String DISTRIBUTED_MUTEX = "distributed.mutex";
+    static final String DISTRIBUTED_GRANT_TIMEOUT_TICKS = "distributed.grantTimeoutTicks";
     static final String LOG_FILE = "log.file";
     static final String LOG_CONSOLE = "log.console";
     static final String LOG_LEVEL = "log.level";
@@ -139,6 +141,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private static final int DEFAULT_DISTRIBUTED_LATENCY_MIN_MILLIS = 5;
     private static final int DEFAULT_DISTRIBUTED_LATENCY_MAX_MILLIS = 40;
     private static final long DEFAULT_DISTRIBUTED_SEED = 7;
+    private static final MutexMode DEFAULT_DISTRIBUTED_MUTEX = MutexMode.SEMAPHORE;
+    private static final int DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS = 60;
     private static final String DEFAULT_LOG_FILE = "logs/astra.log";
     private static final boolean DEFAULT_LOG_CONSOLE = true;
     private static final SimLogger.Level DEFAULT_LOG_LEVEL = SimLogger.Level.INFO;
@@ -181,6 +185,8 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
     private final Duration latencyMin;
     private final Duration latencyMax;
     private final long networkSeed;
+    private final MutexMode mutexMode;
+    private final int grantTimeoutTicks;
     private final String logFile;
     private final boolean logConsole;
     private final SimLogger.Level logLevel;
@@ -257,9 +263,11 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
                     + latencyMin.toMillis() + ")");
         }
         networkSeed = positiveLong(p, DISTRIBUTED_SEED, DEFAULT_DISTRIBUTED_SEED);
+        mutexMode = enumValue(p, DISTRIBUTED_MUTEX, MutexMode.class, DEFAULT_DISTRIBUTED_MUTEX);
+        grantTimeoutTicks = positiveInt(p, DISTRIBUTED_GRANT_TIMEOUT_TICKS, DEFAULT_DISTRIBUTED_GRANT_TIMEOUT_TICKS);
         logFile = nonBlank(p, LOG_FILE, DEFAULT_LOG_FILE);
         logConsole = bool(p, LOG_CONSOLE, DEFAULT_LOG_CONSOLE);
-        logLevel = level(p, LOG_LEVEL, DEFAULT_LOG_LEVEL);
+        logLevel = enumValue(p, LOG_LEVEL, SimLogger.Level.class, DEFAULT_LOG_LEVEL);
     }
 
     public static SimConfig load() {
@@ -446,6 +454,16 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         return networkSeed;
     }
 
+    /** Modo de exclusión mutua de las intersecciones al arrancar. */
+    public MutexMode mutexMode() {
+        return mutexMode;
+    }
+
+    /** Ticks que un vehículo puede tener la sección de Ricart-Agrawala sin lograr cruzar antes de soltarla. */
+    public int grantTimeoutTicks() {
+        return grantTimeoutTicks;
+    }
+
     @Override
     public String logFile() {
         return logFile;
@@ -558,16 +576,16 @@ public final class SimConfig implements LightTimings, SmartTimings, RoutingSetti
         return (int) value;
     }
 
-    private static SimLogger.Level level(Properties p, String key, SimLogger.Level defaultValue) {
+    private static <T extends Enum<T>> T enumValue(Properties p, String key, Class<T> type, T defaultValue) {
         String raw = p.getProperty(key);
         if (raw == null) {
             return defaultValue;
         }
         try {
-            return SimLogger.Level.valueOf(raw.strip().toUpperCase(Locale.ROOT));
+            return Enum.valueOf(type, raw.strip().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid value for '" + key + "': '" + raw
-                    + "' must be one of " + Arrays.toString(SimLogger.Level.values()), e);
+                    + "' must be one of " + Arrays.toString(type.getEnumConstants()), e);
         }
     }
 

@@ -254,6 +254,8 @@ emergency.maxSeconds=30
 distributed.latencyMinMillis=5
 distributed.latencyMaxMillis=40
 distributed.seed=7
+distributed.mutex=SEMAPHORE
+distributed.grantTimeoutTicks=60
 map.file=maps/city-3x3.json
 log.file=logs/astra.log
 log.console=true
@@ -305,6 +307,11 @@ log.level=INFO
 - `distributed.*` (`SimulatedNetwork`): cada mensaje entre procesos tarda un retardo sorteado entre
   `distributed.latencyMinMillis` (>= 0) y `distributed.latencyMaxMillis` (>= el mínimo), ambos en ms e incluidos.
   `distributed.seed` hace reproducible el sorteo.
+- `distributed.mutex`: cómo se reserva la zona central de cada intersección al arrancar. `SEMAPHORE` usa solo
+  el `Semaphore` de capacidad (Día 5); `RICART_AGRAWALA` exige además la sección crítica de `IntersectionMutex`.
+  Se cambia en vivo con `SetMutexModeCmd`.
+- `distributed.grantTimeoutTicks`: ticks que un vehículo puede tener la sección de Ricart‑Agrawala sin lograr
+  entrar a la zona; al cumplirse la suelta (`cancel`) y vuelve a encolarse.
 - `log.*` (`SimLogger`): `log.file` es el archivo de log (su carpeta se crea si no existe y se sobrescribe en cada
   ejecución); con `log.console=true` cada línea se copia también a la consola. `log.level` es el nivel mínimo que se
   escribe (`DEBUG`, `INFO`, `WARN` o `ERROR`); las líneas `[LAMPORT]` y `[RICART]` se escriben siempre.

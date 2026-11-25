@@ -57,6 +57,8 @@ class SimConfigTest {
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());
+        assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
+        assertEquals(60, config.grantTimeoutTicks());
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -101,6 +103,8 @@ class SimConfigTest {
         assertEquals(Duration.ofMillis(5), config.latencyMin());
         assertEquals(Duration.ofMillis(40), config.latencyMax());
         assertEquals(7, config.networkSeed());
+        assertEquals(MutexMode.SEMAPHORE, config.mutexMode());
+        assertEquals(60, config.grantTimeoutTicks());
         assertEquals("logs/astra.log", config.logFile());
         assertTrue(config.logConsole());
         assertEquals(SimLogger.Level.INFO, config.logLevel());
@@ -292,6 +296,38 @@ class SimConfigTest {
 
         var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
         assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_LATENCY_MIN_MILLIS), e.getMessage());
+    }
+
+    @Test
+    void mutexKeysOverrideDefaults() {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_MUTEX, "ricart_agrawala");
+        props.setProperty(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS, "10");
+
+        SimConfig config = SimConfig.from(props);
+
+        assertEquals(MutexMode.RICART_AGRAWALA, config.mutexMode());
+        assertEquals(10, config.grantTimeoutTicks());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"LAMPORT", "semaforo", ""})
+    void invalidMutexModeThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_MUTEX, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_MUTEX), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-5", "x"})
+    void invalidGrantTimeoutThrowsWithKeyName(String value) {
+        var props = new Properties();
+        props.setProperty(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS, value);
+
+        var e = assertThrows(IllegalArgumentException.class, () -> SimConfig.from(props));
+        assertTrue(e.getMessage().contains(SimConfig.DISTRIBUTED_GRANT_TIMEOUT_TICKS), e.getMessage());
     }
 
     @Test
