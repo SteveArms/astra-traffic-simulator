@@ -7,11 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.astra.core.IntersectionZones;
+import com.astra.core.MutexMode;
 import com.astra.core.SimConfig;
 import com.astra.core.SimulationEngine;
 import com.astra.core.VehicleSpawner;
 import com.astra.core.WorldSnapshot;
 import com.astra.core.WorldState;
+import com.astra.distributed.IntersectionMutex;
+import com.astra.distributed.SimulatedNetwork;
 import com.astra.graph.RoadGraph;
 import com.astra.model.VehicleKind;
 import com.astra.traffic.Axis;
@@ -164,11 +167,52 @@ class CommandsTest {
     }
 
     @Test
+    void mutexModeWithoutDistributedLayerIsIgnored() {
+        run(Commands.mutexMode(MutexMode.RICART_AGRAWALA));
+        run(Commands.mutexMode(MutexMode.SEMAPHORE));
+
+        assertEquals(MutexMode.SEMAPHORE, engine.mutexMode());
+        assertEquals(0, bus.failedCount());
+        assertEquals(2, bus.ignoredCount());
+    }
+
+    @Test
+    void mutexModeSwitchesAndCancelsPendingRequests() {
+        var cfg = SimConfig.from(new Properties());
+        RoadGraph graph = MapLoader.load(cfg.mapFile()).graph();
+        var network = new SimulatedNetwork(cfg);
+        network.start();
+        var world = new WorldState(graph, cfg, new LightController(graph, cfg), new IntersectionZones(graph, cfg),
+                network, IntersectionMutex.forGraph(graph, network));
+        var distributedBus = new CommandBus();
+        var distributed = new SimulationEngine(cfg, world, new VehicleSpawner(world, cfg), distributedBus);
+        try {
+            distributedBus.submit(Commands.mutexMode(MutexMode.RICART_AGRAWALA));
+            distributed.step();
+            assertEquals(MutexMode.RICART_AGRAWALA, distributed.latestSnapshot().mutexMode());
+            for (int i = 0; i < 400; i++) {
+                distributed.step();
+            }
+
+            distributedBus.submit(Commands.mutexMode(MutexMode.SEMAPHORE));
+            distributed.step();
+
+            assertEquals(MutexMode.SEMAPHORE, distributed.latestSnapshot().mutexMode());
+            assertTrue(world.raQueuedVehicles().isEmpty());
+            assertEquals(0, distributedBus.failedCount());
+        } finally {
+            distributed.stop();
+            network.stop();
+        }
+    }
+
+    @Test
     void allCommandsRunOnEngineThread() {
         List<Command> all = List.of(Commands.pause(), Commands.step(2), Commands.speed(0.5),
                 Commands.spawn(VehicleKind.CAR, "LEAST_CONGESTED", "I00", "I02"),
                 Commands.forceLight(LIGHT_ID, Axis.EW),
-                Commands.lightMode(LightMode.SMART), Commands.togglePause(), Commands.resume());
+                Commands.lightMode(LightMode.SMART), Commands.mutexMode(MutexMode.SEMAPHORE),
+                Commands.togglePause(), Commands.resume());
         List<String> threads = new ArrayList<>();
         for (Command command : all) {
             bus.submit(engine -> {
