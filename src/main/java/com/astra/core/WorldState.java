@@ -345,7 +345,8 @@ public final class WorldState implements QueueSensor {
         NetworkView net = network == null ? NetworkView.EMPTY
                 : new NetworkView(network.sentCount(), network.deliveredCount(), network.inFlightCount());
         return new WorldSnapshot(tick, simTimeSeconds, views, lightViews, spawned, despawned, activeByKind(), paused,
-                speedFactor, stats.toView(), lights.mode(), mutexMode, mutexViews, net);
+                speedFactor, stats.toView(), lights.mode(), mutexMode, mutexViews, net,
+                parking == null ? List.of() : parking.views());
     }
 
     /** @implNote Called from astra-engine. */

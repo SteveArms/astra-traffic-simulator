@@ -14,6 +14,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.function.Predicate;
 
@@ -127,6 +128,24 @@ final class ParkingService {
             leaving.add(vehicle);
         }
         return leaving;
+    }
+
+    /** Cada playa con sus autos y el cajón que ocupan. */
+    List<ParkingView> views() {
+        Map<String, Vehicle> byId = new HashMap<>();
+        parked.forEach(p -> byId.put(p.vehicle().id(), p.vehicle()));
+        List<ParkingView> views = new ArrayList<>();
+        for (ParkingLot lot : directory.lots()) {
+            List<ParkingView.ParkedCar> cars = new ArrayList<>();
+            List<Optional<String>> slots = lot.spots().slots();
+            for (int i = 0; i < slots.size(); i++) {
+                int slot = i;
+                slots.get(i).map(byId::get).ifPresent(
+                        v -> cars.add(new ParkingView.ParkedCar(slot, v.id(), v.length())));
+            }
+            views.add(new ParkingView(lot.id(), lot.capacity(), lot.isOpen(), cars));
+        }
+        return views;
     }
 
     /** Ocupación total para las estadísticas. */

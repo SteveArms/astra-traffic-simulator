@@ -17,6 +17,7 @@ import com.astra.util.MapLoader;
 import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.IntConsumer;
@@ -46,6 +47,7 @@ class ParkingIntegrationTest {
                 lot.spots().slots().forEach(slot -> slot.ifPresent(parkedOnce::add));
             }
             assertEquals(run.world.parkedCount(), parkedNow, "tick " + tick);
+            checkSnapshot(run.world, directory, tick);
             Set<String> active = new HashSet<>();
             for (Vehicle vehicle : run.world.vehicles()) {
                 active.add(vehicle.id());
@@ -68,6 +70,22 @@ class ParkingIntegrationTest {
         assertTrue(run.world.despawned() > 0, "throughput is zero");
         StatsView stats = run.world.toSnapshot(TICKS, 0, false, 1).stats();
         assertTrue(stats.avgParkingOccupancy() > 0);
+    }
+
+    // El snapshot muestra en cada cajón al mismo auto que ocupa la playa.
+    private static void checkSnapshot(WorldState world, ParkingDirectory directory, int tick) {
+        List<ParkingView> views = world.toSnapshot(tick, 0, false, 1).parkings();
+        assertEquals(directory.lots().size(), views.size());
+        for (int i = 0; i < views.size(); i++) {
+            ParkingLot lot = directory.lots().get(i);
+            ParkingView view = views.get(i);
+            assertEquals(lot.id(), view.lotId());
+            assertEquals(lot.occupied(), view.cars().size(), "tick " + tick + ": " + lot.id());
+            for (ParkingView.ParkedCar car : view.cars()) {
+                assertEquals(Optional.of(car.vehicleId()), lot.spots().slots().get(car.slot()));
+                assertTrue(car.length() > 0);
+            }
+        }
     }
 
     @Test
