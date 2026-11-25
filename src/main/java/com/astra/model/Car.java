@@ -11,4 +11,11 @@ public final class Car extends Vehicle {
     public Car(VehicleSpec spec, RouteStrategy strategy, Intersection origin, Intersection destination) {
         super("CAR-" + SEQUENCE.incrementAndGet(), VehicleKind.CAR, spec, strategy, origin, destination);
     }
+
+    /** Auto con un viaje de varios tramos, por ejemplo {@link TripPurpose#PARK}. */
+    public Car(VehicleSpec spec, RouteStrategy strategy, Intersection origin, Intersection destination,
+            TripPurpose purpose, Intersection finalDestination) {
+        super("CAR-" + SEQUENCE.incrementAndGet(), VehicleKind.CAR, spec, strategy, origin, destination, purpose,
+                finalDestination);
+    }
 }
