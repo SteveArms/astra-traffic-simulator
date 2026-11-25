@@ -81,7 +81,8 @@ astra-traffic-simulator/
     │       ├── command/      Command, CommandBus, PauseCmd, ResumeCmd, StepCmd,
     │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd
     │       ├── events/       SimEvent, EventQueue
-    │       ├── distributed/  LamportClock, Request, RicartAgrawala
+    │       ├── distributed/  LamportClock, Request, Message, SimulatedNetwork,
+    │       │                 RicartAgrawalaNode, IntersectionMutex
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel
     │       └── util/         MapLoader, SimLogger
     ├── main/resources/com/astra/
@@ -186,12 +187,17 @@ public class Dijkstra<V, E extends Edge<V>> {
 
 ## 7. Capa distribuida
 
-- `LamportClock.tick(process, action)` → incremento atómico; log `[LAMPORT N] PROCESS -> ACTION`.
-- `RicartAgrawala` mantiene una `PriorityQueue<Request>` ordenada por `(timestamp, processId)`.
-  Log: `[RICART] CAR-42 requested access at 17`, `ENTERED critical section`,
-  `released critical section`.
-- Cada intersección es un "proceso"; los vehículos de carriles en conflicto solicitan acceso a
-  la zona central siguiendo Ricart‑Agrawala.
+- `LamportClock` es un reloj **por proceso**: `tick(action)`, `send(action)` y `receive(remoteTs, action)`
+  (`max(clock, remoteTs) + 1`), atómicos con un `ReentrantLock`; log `[LAMPORT N] PROCESS -> ACTION`.
+- Los procesos se comunican **solo por mensajes** (`Message` REQUEST/REPLY) a través de `SimulatedNetwork`,
+  con latencia aleatoria y sin orden FIFO. Todos los handlers corren en el hilo `astra-net`.
+- `RicartAgrawalaNode` implementa Ricart‑Agrawala (1981) sin estado compartido: pide la sección con un REQUEST
+  a cada par y entra al recibir los N−1 REPLY; difiere su respuesta si está dentro (HELD) o si su propio
+  pedido es anterior según `Request` (`(timestamp, processId)`). Cada entrada cuesta 2(N−1) mensajes.
+  Log: `[RICART] <proc> requested access at 17`, `ENTERED critical section`, `released critical section`.
+- `IntersectionMutex`: un grupo RA por intersección; cada **vía entrante** es un proceso
+  (`"<intersectionId>/<roadId>"`) con una cola FIFO de vehículos, y solo el primero compite por la zona central.
+  API no bloqueante para el motor: `enqueue`, `isGranted`, `release`, `cancel`.
 - El formato de logs debe mantenerse estable: se usa como evidencia en el informe.
 
 ---
