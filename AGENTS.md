@@ -72,7 +72,7 @@ astra-traffic-simulator/
     │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, ParallelUpdater, PauseGate,
     │       │                 PauseListener, SimulationControl, SimConfig, VehicleSpawner, ParkingService,
     │       │                 IntersectionZone, IntersectionZones, MutexMode, SimStats, StatsPoint,
-    │       │                 StatsView, LightView, MutexView, NetworkView
+    │       │                 StatsView, LightView, MutexView, NetworkView, ParkingView
     │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, NodeKind, Road, RoadGraph, Heuristics
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
     │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, VehicleKind, TripPurpose,
@@ -92,7 +92,7 @@ astra-traffic-simulator/
     │       │                 NearestAlternative/WaitAtEntrance/GiveUpStrategy, ParkingSearchPolicy,
     │       │                 SearchDecision, ParkingSettings
     │       ├── view/         CityRenderer, ControlPanel, StatsPanel, CityPainter, SignalPainter,
-    │       │                 VehiclePainter, ViewTransform
+    │       │                 VehiclePainter, LotGeometry, ViewTransform
     │       └── util/         MapLoader, MapFormatException, SimLogger, LogSettings
     ├── main/resources/com/astra/
     │   ├── maps/city-3x3.json      (mapa original; lo usan los tests)
@@ -227,6 +227,8 @@ public final class ResourcePool<T> {
   sellada: `Reroute`, `Wait` o `GiveUp`). El tope `parking.maxSearchAttempts` lo aplica `ParkingSearchPolicy`.
 - Los cajones de una playa son un `ResourcePool<String>` (`Semaphore` justo + arreglo de slots, `tryAcquire` sin
   bloquear). Llegadas, esperas y salidas ocurren en la fase C del motor (`ParkingService`), en tiempo simulado.
+  La vista recibe cada playa como `ParkingView` en el snapshot; `LotGeometry` ubica el cajón `i` en el mismo orden
+  que los índices del `ResourcePool`.
 - Una nueva acción de usuario = un nuevo `Command`.
 
 ---
