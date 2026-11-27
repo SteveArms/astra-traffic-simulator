@@ -2,7 +2,7 @@ package com.astra.traffic;
 
 import com.astra.graph.Road;
 
-/** Eje de circulación de una vía: norte-sur ({@link #NS}) o este-oeste ({@link #EW}). Cada semáforo alterna los dos. */
+/** Eje de una vía: norte-sur ({@link #NS}) o este-oeste ({@link #EW}). Cada semáforo alterna los dos. */
 public enum Axis {
     NS,
     EW;
