@@ -1,21 +1,33 @@
 # ASTRA — Traffic Simulator
 
-**ASTRA** (*Asynchronous Simulator of Traffic, Routing & Automata*) es un simulador 2D de
-tráfico urbano con calles, semáforos inteligentes y vehículos con distintos comportamientos.
-Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
+**ASTRA** (*Asynchronous Simulator of Traffic, Routing & Automata*) es un simulador 2D de tráfico
+urbano: una ciudad vista desde arriba con semáforos inteligentes, playas de estacionamiento y autos,
+buses y ambulancias que eligen su ruta de distintas formas. Lo desarrollamos para el curso de
+**Tecnología de Objetos** (UNSA).
 
-- El motor de simulación corre en su propio hilo con paso fijo.
-- Los semáforos cambian de estado de forma asíncrona (patrón State) y cada intersección limita
-  cuántos vehículos cruzan a la vez con un `Semaphore`.
-- Dentro de cada tick, los vehículos se actualizan en paralelo en `astra-worker-N`, con sus fases
-  sincronizadas por un `Phaser` (ver [Ciclo de un tick](#ciclo-de-un-tick)).
-- Autos, buses y ambulancias entran y salen por el borde del mapa, cada uno con su estrategia de
-  ruta; las ambulancias ponen en verde el semáforo al que se acercan.
-- La interfaz JavaFX solo dibuja *snapshots* inmutables del mundo; cada acción del usuario (pausa,
-  paso, velocidad, generar vehículos, forzar un semáforo) es un `Command` que el motor ejecuta al
-  inicio del tick.
-- Los semáforos tienen un modo inteligente que alarga el verde del eje con más vehículos esperando.
-- Los vehículos cruzan las intersecciones con Reloj de Lamport y Ricart‑Agrawala. *(En desarrollo)*
+`Java 21` · `JavaFX 21.0.5` · `Maven 3.9+` · `Gson 2.11` · `JUnit 5.11`
+
+<!-- Captura pendiente: agregar docs/img/astra-main.png y reemplazar este comentario por
+![ASTRA en ejecución](docs/img/astra-main.png) -->
+*Captura pendiente: `docs/img/astra-main.png`.*
+
+## Características
+
+- **Motor de paso fijo** en su propio hilo (`astra-engine`), con un tick de 50 ms dividido en tres fases;
+  las dos primeras corren en paralelo en `astra-worker-N`, sincronizadas con un `Phaser`.
+- **Semáforos asíncronos** con el patrón State en un `ScheduledExecutorService`: ciclo fijo o modo
+  inteligente, que alarga el verde del eje con más demanda.
+- **Preferencia de paso:** las ambulancias ponen en verde el semáforo al que se acercan.
+- **Tres estrategias de ruta** (Strategy): la más corta (Dijkstra), la menos congestionada (A*,
+  recalculada en cada cruce) y una aleatoria.
+- **Exclusión mutua en los cruces** con un `Semaphore` de capacidad o, en vivo, con **Ricart‑Agrawala**
+  por paso de mensajes y relojes de **Lamport**.
+- **Playas de estacionamiento** con cajones como recurso compartido (`ResourcePool<T>`) y tres
+  estrategias para cuando están llenas.
+- **Interfaz JavaFX** que solo dibuja *snapshots* inmutables; cada acción del usuario es un `Command`.
+- **Estadísticas en vivo:** espera y viaje promedio, throughput, colas y dos gráficas.
+- **Logs de evidencia** `[LAMPORT N] PROCESS -> ACTION` y `[RICART] ...` en `logs/astra.log`.
+- **387 tests** JUnit 5 que corren sin interfaz gráfica, incluidas pruebas de estrés con 150 vehículos.
 
 ## Requisitos
 
@@ -24,28 +36,37 @@ Lo desarrollamos para el curso de **Tecnología de Objetos** (UNSA).
 | JDK | 21 o superior (el proyecto compila con `--release 21`) |
 | Maven | 3.9 o superior |
 
-JavaFX 21, Gson y JUnit 5 los descarga Maven; no hace falta instalarlos.
+JavaFX, Gson y JUnit los descarga Maven; no hace falta instalarlos.
 
-## Comandos
+## Instalación y ejecución
+
+```bash
+git clone <url-del-repositorio>
+cd astra-traffic-simulator
+```
 
 Ejecuta todos los comandos desde la raíz del repositorio, donde está `pom.xml`.
 
 ```bash
-mvn clean compile          # compilar
-mvn javafx:run             # ejecutar la aplicación
-mvn test                   # ejecutar los tests
-mvn -Dtest=DijkstraTest test   # ejecutar un solo test
+mvn clean compile                # compilar
+mvn javafx:run                   # ejecutar la aplicación
+mvn test                         # ejecutar los 387 tests
+mvn -Dtest=DijkstraTest test     # ejecutar una sola clase de test
+mvn javadoc:javadoc              # generar el Javadoc en target/reports/apidocs/
 ```
 
-Usa `mvn javafx:run` para abrir la aplicación; `java -jar` falla porque no encuentra JavaFX.
+Usa `mvn javafx:run` para abrir la aplicación; `java -jar` falla porque no encuentra JavaFX. Los
+parámetros de la simulación están en `src/main/resources/com/astra/config.properties` (ver
+[Configuración](docs/configuracion.md)).
 
-## Ejecutable para Windows
+**Pendiente:** un runner de escenarios sin interfaz (por ejemplo `ScenarioRunner`) para generar trazas y
+métricas reproducibles. No existe en el código.
 
-Puedes generar `ASTRA.exe`, que se abre con doble clic, sin consola y sin tener Java ni Maven
-instalados: lleva dentro su propio runtime con JavaFX y Gson.
+### Ejecutable para Windows
 
-La forma más simple es hacer doble clic en **`build-exe.bat`**, en la raíz del repositorio
-(requiere JDK 21+ y Maven en el PATH). Hace lo mismo que estos comandos:
+`build-exe.bat`, en la raíz, genera `target\dist\ASTRA\ASTRA.exe`, que se abre con doble clic, sin
+consola y sin tener Java instalado: lleva su propio runtime con JavaFX y Gson. Requiere JDK 21+ y Maven en
+el `PATH`. Hace lo mismo que:
 
 ```bat
 mvn clean javafx:jlink
@@ -57,62 +78,10 @@ jpackage --type app-image --name ASTRA --app-version 0.1.0 ^
 
 1. `javafx:jlink` crea en `target\astra-runtime` un Java mínimo con ASTRA y sus dependencias.
 2. `jpackage` (incluido en el JDK) lo convierte en la carpeta `target\dist\ASTRA\`.
-3. Abre `target\dist\ASTRA\ASTRA.exe`.
 
-Para llevarlo a otra PC, copia la carpeta `ASTRA\` completa (unos 90 MB); el `.exe` solo no
-funciona. Después de cambiar el código, vuelve a ejecutar `build-exe.bat` con ASTRA cerrado. La
-carpeta queda en `target\`, así que Git la ignora.
-
-## Estructura
-
-```
-src/main/java/com/astra/
-├── app/          AstraApp: punto de entrada JavaFX
-├── core/         SimConfig, SimulationEngine, ParallelUpdater, WorldState, WorldSnapshot,
-│                 VehicleSpawner, LightView, IntersectionZone(s), PauseGate, SimulationControl,
-│                 SimStats, StatsView
-├── graph/        Graph<V,E>, Edge, Intersection, Road, RoadGraph, Heuristics
-│   └── algo/     Dijkstra, AStar
-├── model/        Vehicle, Car, Bus, Ambulance, VehicleSpec(s), VehicleFactory, VehicleKind,
-│                 VehicleView; carriles (En desarrollo)
-├── traffic/      LightState, Green/Yellow/Red/Emergency/SmartAdaptiveState, TrafficLight,
-│                 LightController, LightMode, QueueSensor
-├── routing/      RouteStrategy, ShortestDistance/LeastCongested/RandomRouteStrategy,
-│                 RouteStrategies, RoadOccupancy
-├── command/      Command, CommandBus, Commands y los comandos (Pause, Resume, TogglePause, Step,
-│                 SetSpeed, SpawnVehicle, ForceLight, SetLightMode)
-├── events/       Eventos y su cola de prioridad (En desarrollo)
-├── distributed/  Lamport y Ricart‑Agrawala (En desarrollo)
-├── view/         CityRenderer, ControlPanel, StatsPanel
-└── util/         MapLoader, MapFormatException; SimLogger (En desarrollo)
-
-src/main/resources/com/astra/
-├── config.properties     parámetros de la simulación
-├── css/astra.css         tema oscuro de la interfaz
-└── maps/city-3x3.json    mapa por defecto
-```
-
-Los paquetes `core`, `graph`, `model`, `traffic`, `routing` y `distributed` no dependen de
-JavaFX, así que el motor se puede probar sin interfaz gráfica.
-
-## Patrones y genéricos
-
-| Elemento | Dónde | Para qué | Estado |
-| --- | --- | --- | --- |
-| State | `traffic` (`LightState`, `GreenState`, `YellowState`, `RedState`) | Cada fase del semáforo es una clase que decide el color de cada eje (NS/EW), su duración y la fase siguiente | Implementado |
-| Semáforo inteligente | `traffic.SmartAdaptiveState`, `LightMode` | En modo SMART, el verde se alarga de a `smart.extensionStepSeconds` mientras su eje tenga al menos `smart.queueThreshold` vehículos acercándose y el contrario menos, hasta `smart.maxExtensionSeconds` | Implementado |
-| Preferencia de paso | `traffic.EmergencyState`, `TrafficLight.preempt/release` | Una ambulancia a menos de `emergency.preemptDistance` pone en verde su eje; al salir del cruce sigue el ciclo normal. Sigue necesitando reservar la zona | Implementado |
-| `Semaphore` | `core.IntersectionZone` | Limita cuántos vehículos ocupan a la vez la zona de cruce; solo `tryAcquire`, nunca bloquea el tick | Implementado |
-| Strategy | `routing` (`RouteStrategy`) | Cambiar cómo calcula su ruta un vehículo: más corta (Dijkstra), menos congestionada (A* con la ocupación de las vías, recalculada en cada intersección) o aleatoria | Implementado |
-| Tipos de vehículo | `model` (`Car`, `Bus`, `Ambulance`, `VehicleFactory`) | Cada tipo tiene su velocidad, aceleración, frenado y largo (`VehicleSpec`); `VehicleSpawner` los genera por pesos | Implementado |
-| `Phaser` | `core.ParallelUpdater` | Separa las fases PLAN y MOVE de los `astra-worker-N` dentro de cada tick | Implementado |
-| Command | `command` (`Command`, `CommandBus`, `Commands`) | La UI envía acciones a una `LinkedBlockingQueue` y el motor las ejecuta en orden al inicio de cada tick; un comando que falla no detiene a los demás | Implementado |
-| Pausa, paso y velocidad | `core` (`PauseGate`, `SimulationControl`) | `PauseGate` (`ReentrantLock` + `Condition`) congela el mundo y los semáforos sin bloquear el motor, que sigue drenando comandos; la velocidad va de ×0.25 a ×4 | Implementado |
-| Estadísticas | `core` (`SimStats`, `StatsView`) | Espera y viaje promedio (total y por tipo), throughput de los últimos 60 s, colas y una serie de 300 puntos para las gráficas | Implementado |
-| `Graph<V, E extends Edge<V>>` | `graph` | Grafo dirigido genérico y seguro para lecturas concurrentes | Implementado |
-| `PriorityQueue` | `graph.algo.Dijkstra` | Cola ordenada por distancia en el cálculo de caminos mínimos | Implementado |
-| `PriorityQueue` | `graph.algo.AStar` | Cola ordenada por `f = g + h` con heurístico euclidiano admisible | Implementado |
-| `PriorityQueue` | `events`, `distributed` | Cola de eventos y solicitudes de Ricart‑Agrawala ordenadas por `(timestamp, processId)` | En desarrollo |
+Para llevarlo a otra PC, copia la carpeta `ASTRA\` completa; el `.exe` solo no funciona. Después de
+cambiar el código, vuelve a ejecutar `build-exe.bat` con ASTRA cerrado. La carpeta queda en `target\`,
+así que Git la ignora.
 
 ## Controles
 
@@ -120,90 +89,94 @@ JavaFX, así que el motor se puede probar sin interfaz gráfica.
 | --- | --- |
 | `Espacio` | Pausar o reanudar |
 | `S` | Avanzar un tick (solo en pausa) |
-| `+` / `−` | Duplicar o dividir la velocidad (entre ×0.25 y ×4) |
-| Clic en una intersección | Seleccionarla (también en el panel de semáforos) |
-| Clic derecho en una intersección | Forzar verde NS o EW |
+| `+` / `-` (o `−`) | Duplicar o dividir la velocidad, entre ×0.25 y ×4 |
+| Clic en un cruce con semáforo | Seleccionarlo (también en la lista del panel **Semáforos**) |
+| Clic derecho en un cruce con semáforo | Forzar verde NS o EW |
+| Botones del panel izquierdo | Pausar, Paso, Velocidad, Mostrar etiquetas, Generar, Generar ×10, Fijo / Inteligente, Verde NS / EW, Semaphore / Ricart-Agrawala |
 
-Si un botón o una lista tiene el foco, `Espacio` hace su acción propia (por ejemplo, pulsa el
-botón); los demás atajos funcionan siempre. Junto a cada semáforo, `↕` y `↔` muestran cuántos
-vehículos se acercan por el eje NS y EW.
+Si un botón o una lista tiene el foco, `Espacio` hace su acción propia (por ejemplo, pulsa el botón); los
+demás atajos funcionan siempre. El recorrido completo de la interfaz está en la
+[Guía de usuario](docs/guia-de-usuario.md).
 
-## Ciclo de un tick
+## Requisitos del curso
 
-Cada tick (`engine.tickMillis`, 50 ms por defecto) pasa por tres fases. Con `engine.parallel=false`, las
-fases A y B corren en un bucle secuencial en `astra-engine`, para depurar y comparar.
+| Requisito | Dónde se cumple |
+| --- | --- |
+| Hilos y concurrencia | `SimulationEngine` (`astra-engine`), `ParallelUpdater` (`astra-worker-N` con `Phaser`), `LightController` (`astra-lights-N`), `SimulatedNetwork` (`astra-net`), `SimLogger` (`astra-logger`); `IntersectionZone` con `Semaphore` y `tryAcquire`; `PauseGate` con `ReentrantLock` y `Condition` |
+| Patrón State | `LightState` con `GreenState`, `YellowState`, `RedState`, `EmergencyState` y `SmartAdaptiveState`; lo usa `TrafficLight` |
+| Patrón Strategy | `RouteStrategy` con `ShortestDistanceStrategy`, `LeastCongestedStrategy` y `RandomRouteStrategy`; `ParkingSearchStrategy` con `NearestAlternativeStrategy`, `WaitAtEntranceStrategy` y `GiveUpStrategy` |
+| Patrón Command | `Command`, `CommandBus` (`LinkedBlockingQueue`) y `PauseCmd`, `ResumeCmd`, `TogglePauseCmd`, `StepCmd`, `SetSpeedCmd`, `SpawnVehicleCmd`, `ForceLightCmd`, `SetLightModeCmd`, `SetMutexModeCmd` |
+| Genéricos | `Graph<V, E extends Edge<V>>` (y `RoadGraph`), `Dijkstra<V, E>`, `AStar<V, E>`, `ResourcePool<T>` |
+| Colas de prioridad | `PriorityQueue` en `Dijkstra` (por distancia) y en `AStar` (por `f = g + h`); `Request` define el orden `(timestamp, processId)` de Ricart‑Agrawala |
+| Reloj de Lamport | `LamportClock`: un reloj por proceso con `tick`, `send` y `receive` |
+| Ricart‑Agrawala | `RicartAgrawalaNode` por paso de mensajes sobre `SimulatedNetwork`; `IntersectionMutex` lo usa en cada cruce |
 
+## Documentación
+
+| Documento | Contenido |
+| --- | --- |
+| [Arquitectura](docs/arquitectura.md) | Paquetes y dependencias, flujo UI → comando → motor → snapshot y ciclo de vida |
+| [Concurrencia](docs/concurrencia.md) | Hilos, tick de tres fases, pausa, zonas, playas y prevención de deadlocks |
+| [Patrones y genéricos](docs/patrones-y-genericos.md) | State, Strategy, Command, `Graph<V, E>`, Dijkstra, A* y colas de prioridad |
+| [Capa distribuida](docs/capa-distribuida.md) | Lamport, red simulada, Ricart‑Agrawala, `IntersectionMutex` y una traza real |
+| [Simulación](docs/simulacion.md) | Modelo de conducción, vehículos, spawner, ambulancias, SMART, playas y métricas |
+| [Mapas](docs/mapas.md) | Formato JSON, validaciones y el mapa `city-3x3-v2.json` |
+| [Configuración](docs/configuracion.md) | Todas las claves de `config.properties` |
+| [Pruebas](docs/pruebas.md) | Cómo correr los tests y qué verifica cada clase |
+| [Guía de usuario](docs/guia-de-usuario.md) | Paneles, símbolos del mapa y tres recorridos guiados |
+| [Cómo contribuir](docs/contribuir.md) | Flujo Git, formato de commits y Definition of Done |
+| [CHANGELOG](CHANGELOG.md) | Cambios por día y por rama |
+
+Las reglas del proyecto para personas y agentes de IA están en [AGENTS.md](AGENTS.md), y las
+indicaciones para Claude Code en [CLAUDE.md](CLAUDE.md).
+
+## Estructura
+
+```text
+astra-traffic-simulator/
+├── pom.xml, build-exe.bat
+├── README.md, CHANGELOG.md, AGENTS.md, CLAUDE.md
+├── docs/                         documentación
+└── src/
+    ├── main/java/com/astra/
+    │   ├── app/          AstraApp
+    │   ├── core/         motor, estado del mundo, zonas, pausa, spawner, playas, estadísticas, SimConfig
+    │   ├── graph/        Graph<V,E>, Edge, Intersection, NodeKind, Road, RoadGraph, Heuristics
+    │   │   └── algo/     Dijkstra, AStar
+    │   ├── model/        Vehicle, Car, Bus, Ambulance, VehicleSpec, VehicleFactory
+    │   ├── traffic/      LightState y sus estados, TrafficLight, LightController
+    │   ├── routing/      RouteStrategy y sus estrategias, RoadOccupancy
+    │   ├── parking/      ResourcePool<T>, ParkingLot, ParkingDirectory y estrategias de búsqueda
+    │   ├── command/      Command, CommandBus, Commands y los comandos
+    │   ├── distributed/  LamportClock, SimulatedNetwork, RicartAgrawalaNode, IntersectionMutex
+    │   ├── events/       reservado (vacío)
+    │   ├── view/         CityRenderer, ControlPanel, StatsPanel y los painters
+    │   └── util/         MapLoader, SimLogger
+    ├── main/resources/com/astra/
+    │   ├── config.properties
+    │   ├── css/astra.css
+    │   └── maps/         city-3x3-v2.json (por defecto), city-3x3.json (tests)
+    └── test/java/com/astra/      49 clases de test, en espejo de los paquetes
 ```
- astra-engine        astra-worker-1 … astra-worker-N (un bloque de vehículos cada uno)
- ────────────        ─────────────────────────────────────────────────────────────────
-     │
-     │  envía N tareas, ya registradas en el Phaser
-     ├──────────────▶ ┌─ A · PLAN ────────────────────────────────────────────────┐
-     │                │ distancia libre de cada vehículo → plan[i]                │
-     │                │ solo lee offsets ajenos (nadie se mueve hasta B)          │
-     │                │ zone.tryEnter · preempt · entryClaims.putIfAbsent         │
-     │                └───────────────────────────────────────────────────────────┘
-     │ espera (timeout 2 × tick)        ═══ Phaser: todos los PLAN terminan ═══
-     │                ┌─ B · MOVE ────────────────────────────────────────────────┐
-     │                │ vehicle.update(dt, plan[i]): solo su propio estado        │
-     │                └───────────────────────────────────────────────────────────┘
-     │ espera (timeout 2 × tick)        ═══ Phaser: todos los MOVE terminan ═══
-     ▼
- ┌─ C · COMMIT (secuencial) ───────────────────────────────────────────────────┐
- │ libera zonas y semáforos · rutas adaptativas · elimina a los que llegaron   │
- │ VehicleSpawner · índice por vía · RoadOccupancy · publica WorldSnapshot     │
- └─────────────────────────────────────────────────────────────────────────────┘
-```
 
-Si una tarea falla, sigue llegando al `Phaser` para no dejarlo colgado y el motor relanza la
-excepción al terminar la fase. En paralelo, los workers compiten de verdad por las zonas, así que
-dos ejecuciones con la misma semilla pueden diferir en el orden de llegada; en modo secuencial son
-idénticas.
+## Pendiente
 
-## Formato del mapa
+- Captura de pantalla en `docs/img/astra-main.png`.
+- Runner de escenarios sin interfaz (`ScenarioRunner`) y la carpeta `docs/report/evidence/`.
+- Informe LaTeX en `docs/report/`.
+- Cerrar una playa desde la interfaz y mostrar las métricas de estacionamiento.
+- Paquete `events` (cola de eventos con prioridad): reservado y vacío.
 
-Los mapas son archivos JSON en `src/main/resources/com/astra/maps/`. El mapa que se carga se
-indica en `config.properties` con la clave `map.file`.
-
-```json
-{
-  "name": "Mini",
-  "intersections": [
-    { "id": "A", "x": 150, "y": 100 },
-    { "id": "B", "x": 350, "y": 100 }
-  ],
-  "roads": [
-    { "id": "R1", "from": "A", "to": "B", "speedLimit": 14, "lanes": 1, "twoWay": true }
-  ]
-}
-```
-
-| Campo de `roads` | Obligatorio | Descripción |
-| --- | --- | --- |
-| `id`, `from`, `to` | Sí | `from` y `to` son ids de intersecciones existentes |
-| `speedLimit` | Sí | Velocidad máxima, mayor que 0 |
-| `lanes` | Sí | Número de carriles, al menos 1 |
-| `twoWay` | No | Si es `true` crea dos vías: `<id>-F` y `<id>-B`. Si falta, la vía es de un solo sentido |
-| `length` | No | Si falta, se usa la distancia euclidiana entre las intersecciones |
-
-Si el mapa tiene ids duplicados, referencias a intersecciones inexistentes o listas vacías, la
-carga falla con `MapFormatException` y un mensaje que indica el problema.
-
-## Flujo Git
-
-- `main`: versión estable; solo recibe merges de `release/*`.
-- `develop`: rama de integración.
-- `feature/<tema>`, `fix/<tema>`, `test/<tema>`, `docs/<tema>`, `chore/<tema>`: se crean desde
-  `develop` y vuelven a ella mediante Pull Request.
-- Commits con [Conventional Commits](https://www.conventionalcommits.org/), por ejemplo
-  `feat(graph): add Dijkstra shortest path`.
-
-Las reglas completas del proyecto están en [AGENTS.md](AGENTS.md) y las indicaciones para
-Claude Code en [CLAUDE.md](CLAUDE.md).
-
-## Integrantes
+## Equipo
 
 | Nombre | Rol |
 | --- | --- |
 | *Por definir* | *Por definir* |
 | *Por definir* | *Por definir* |
+
+## Créditos
+
+Proyecto del curso **Tecnología de Objetos**, Universidad Nacional de San Agustín de Arequipa (UNSA).
+Ricart‑Agrawala sigue el algoritmo de G. Ricart y A. K. Agrawala, *An Optimal Algorithm for Mutual
+Exclusion in Computer Networks* (1981), y los relojes lógicos siguen a L. Lamport, *Time, Clocks, and
+the Ordering of Events in a Distributed System* (1978).
