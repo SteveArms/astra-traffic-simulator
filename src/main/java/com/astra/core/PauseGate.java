@@ -84,6 +84,7 @@ public final class PauseGate {
         }
     }
 
+    /** @implNote Called before the simulation starts (AstraApp.start, tests). */
     public void addListener(PauseListener listener) {
         listeners.add(Objects.requireNonNull(listener, "listener"));
     }

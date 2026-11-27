@@ -43,7 +43,7 @@ public final class IntersectionZone {
         return true;
     }
 
-    /** Idempotente: solo libera si el vehículo estaba dentro. */
+    /** Idempotente: solo libera si el vehículo estaba dentro. @implNote Called from astra-engine or astra-worker-N. */
     public void leave(String vehicleId) {
         if (occupants.remove(vehicleId)) {
             permits.release();
