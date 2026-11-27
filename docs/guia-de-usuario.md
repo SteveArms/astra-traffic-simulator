@@ -73,11 +73,13 @@ En pausa, la ciudad se oscurece y aparece **PAUSA** en el centro.
 | Zona llena | Contorno naranja sobre el cuadrado del cruce cuando tiene tantos vehículos dentro como su capacidad (2) |
 | Selección | Cuadrado azul alrededor del cruce elegido |
 | Candados | Solo en modo Ricart-Agrawala, fuera de la esquina superior izquierda de cada cruce: contorno = nadie tiene la sección; relleno y con el id del vehículo = ese vehículo la tiene |
-| Playas | Rectángulos de asfalto con los cajones pintados, unidos a la calle por su entrada, con un letrero azul con una **P** blanca. Los autos estacionados no se dibujan |
+| Playas | Rectángulos de asfalto con los cajones pintados, unidos a la calle por su entrada, con un letrero azul con una **P** blanca |
+| Autos estacionados | Cada uno en su cajón, con el frente hacia el pasillo y el mismo color que tenía en la calle |
+| Playa llena o cerrada | Contorno naranja alrededor de la playa |
 | Autos | Seis colores de carrocería, con techo, parabrisas y faros |
 | Buses | Amarillos, más largos, con una fila de ventanas a cada lado |
 | Ambulancias | Blancas con una cruz roja y una barra de luces que alterna rojo y azul dos veces por segundo de tiempo simulado (se detiene en pausa) |
-| Etiquetas | Con **Mostrar etiquetas**, el id de cada nodo (`I11`, `G-N0`, `P00` …) y de cada vehículo (`CAR-12`, `BUS-3`, `AMB-1`) |
+| Etiquetas | Con **Mostrar etiquetas**, el id de cada nodo (`I11`, `G-N0`, `P00` …) y de cada vehículo (`CAR-12`, `BUS-3`, `AMB-1`); al fondo de cada playa, sus cajones libres (`<libres>/<capacidad> libres`) o `Cerrada` |
 
 ## Controles con el mouse y el teclado
 
@@ -130,8 +132,9 @@ semillas (ver [Pruebas](pruebas.md)).
 
 **Pendiente:** cerrar una playa desde la interfaz. `ParkingLot.setOpen(false)` existe y la cierra (rechaza
 a los que llegan y deja salir a los que estaban), pero ningún comando ni control de la interfaz lo llama:
-hoy solo lo usan los tests. Tampoco se dibujan los autos estacionados ni se muestran las métricas de
-estacionamiento (búsqueda media, rechazos y ocupación), que sí se calculan.
+hoy solo lo usan los tests. Si una playa se cerrara, el mapa ya la mostraría con contorno naranja y la
+etiqueta `Cerrada`. Tampoco se muestran las métricas de estacionamiento (búsqueda media, rechazos y
+ocupación), que sí se calculan.
 
 Lo que se puede hacer hoy es comparar las estrategias cuando las playas se llenan:
 
@@ -142,10 +145,12 @@ Lo que se puede hacer hoy es comparar las estrategias cuando las playas se llena
    - `WAIT_AT_ENTRANCE`: el auto se queda detenido en la entrada de la playa hasta
      `parking.waitAtEntranceSeconds` (8 s) y después busca otra.
    - `GIVE_UP`: el auto sale enseguida por el gateway más cercano.
-3. Abre la aplicación con **Mostrar etiquetas** activado y sigue a los autos que entran a una playa
-   (`P00` … `P11`). Con `WAIT_AT_ENTRANCE` se ven detenidos al final de la entrada; con las otras dos,
-   dan la vuelta y siguen.
-4. Tras `parking.maxSearchAttempts` (2) intentos fallidos, cualquier estrategia se rinde.
+3. Abre la aplicación con **Mostrar etiquetas** activado. Cada playa (`P00` … `P11`) muestra sus
+   cajones libres y los autos aparecen en su cajón al estacionar. Cuando una se llena, la rodea un
+   contorno naranja.
+4. Sigue a los autos que llegan a una playa llena. Con `WAIT_AT_ENTRANCE` se ven detenidos al final de
+   la entrada; con las otras dos, dan la vuelta y siguen.
+5. Tras `parking.maxSearchAttempts` (2) intentos fallidos, cualquier estrategia se rinde.
 
 El comportamiento completo, con playas cerradas, lo comprueban `ParkingSearchStrategyTest` y
 `ParkingIntegrationTest.fullLotsMakeVehiclesSearchAndCountRejections`.
