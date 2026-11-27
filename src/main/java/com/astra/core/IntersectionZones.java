@@ -6,7 +6,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Una {@link IntersectionZone} por intersección del grafo. */
+/** Una {@link IntersectionZone} por intersección del grafo. @implNote Seguro desde cualquier hilo. */
 public final class IntersectionZones {
 
     private final Map<Intersection, IntersectionZone> zones = new ConcurrentHashMap<>();

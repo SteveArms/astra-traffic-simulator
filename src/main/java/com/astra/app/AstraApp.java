@@ -26,6 +26,12 @@ import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
+/**
+ * Punto de entrada JavaFX: carga la configuración y el mapa, arma el motor, los semáforos, la red simulada y los tres
+ * paneles, y los arranca. Al cerrar detiene todo en orden: vista, motor, semáforos, red y logger.
+ *
+ * @implNote {@link #start} y {@link #stop} los llama JavaFX en el FX Application Thread.
+ */
 public final class AstraApp extends Application {
 
     private static final String TITLE = "ASTRA — Traffic Simulator · %s";

@@ -4,6 +4,7 @@ import com.astra.graph.Intersection;
 import com.astra.routing.RouteStrategy;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/** Auto ({@code CAR-N}): el único tipo que puede hacer un viaje {@link TripPurpose#PARK}. */
 public final class Car extends Vehicle {
 
     private static final AtomicInteger SEQUENCE = new AtomicInteger();
