@@ -187,9 +187,15 @@ flowchart TD
 - **Salida.** Cuando vence su estancia, el auto vuelve solo si la primera vía tiene sitio y la zona de la
   playa no está llena; si no, lo reintenta en el tick siguiente.
 - **Estacionado** no cuenta como "salido": solo cuenta cuando por fin sale por un gateway.
+- **En el snapshot.** Como la vista no puede leer las playas desde el FX Thread, en cada tick
+  `ParkingService.views()` arma un `ParkingView(lotId, capacity, open, cars)` inmutable por playa. Cada
+  `ParkedCar(slot, vehicleId, length)` lleva el índice de su cajón en el `ResourcePool`, y
+  `CityRenderer` lo dibuja en ese cajón con la geometría de `LotGeometry`. `ParkingView.full()` es
+  `true` si la playa está cerrada o sin cajones libres.
 - **Playas cerradas.** `ParkingLot.setOpen(false)` rechaza a todos los que llegan y deja salir a los que
-  ya estaban. **Pendiente:** no hay un comando ni un control de la interfaz que lo llame; hoy solo lo
-  usan los tests (`ParkingLotTest`, `ParkingSearchStrategyTest`).
+  ya estaban. El mapa la mostraría con contorno naranja y la etiqueta `Cerrada`. **Pendiente:** no hay
+  un comando ni un control de la interfaz que llame a `setOpen`; hoy solo lo usan los tests
+  (`ParkingLotTest`, `ParkingSearchStrategyTest`).
 
 ## Estadísticas
 
