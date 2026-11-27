@@ -24,6 +24,7 @@
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
+        <maven.javadoc.plugin.version>3.11.2</maven.javadoc.plugin.version>
 
         <main.class>com.astra/com.astra.app.AstraApp</main.class>
     </properties>
@@ -77,6 +78,35 @@
                     <stripDebug>true</stripDebug>
                     <noHeaderFiles>true</noHeaderFiles>
                     <noManPages>true</noManPages>
+                </configuration>
+            </plugin>
+            <!-- mvn javadoc:javadoc: HTML en target/reports/apidocs. Con module-info, el plugin pone JavaFX y Gson en el
+                 module path. doclint=none: el Javadoc del proyecto es breve a propósito (sin @param/@return en cada
+                 método) y doclint lo trataría como error; las etiquetas @implNote se declaran abajo. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>${maven.javadoc.plugin.version}</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                    <docencoding>${project.reporting.outputEncoding}</docencoding>
+                    <charset>${project.reporting.outputEncoding}</charset>
+                    <locale>es</locale>
+                    <doclint>none</doclint>
+                    <show>package</show>
+                    <tags>
+                        <tag>
+                            <name>implNote</name>
+                            <placement>a</placement>
+                            <head>Nota de implementación:</head>
+                        </tag>
+                        <tag>
+                            <name>apiNote</name>
+                            <placement>a</placement>
+                            <head>Nota de API:</head>
+                        </tag>
+                    </tags>
                 </configuration>
             </plugin>
         </plugins>
