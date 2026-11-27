@@ -18,8 +18,8 @@ comportamientos, desarrollada para el curso de **Tecnologia de Objetos** (UNSA).
 - Los **semáforos** cambian de estado de forma **asíncrona** (`ScheduledExecutorService`).
 - La **UI JavaFX** solo dibuja *snapshots* inmutables del mundo.
 - Patrones obligatorios: **State** (semáforos), **Strategy** (rutas), **Command** (pausa/eventos).
-- Genéricos obligatorios: **`Graph<V, E>`** y **colas de prioridad** (Dijkstra/A*, eventos,
-  Ricart‑Agrawala).
+- Genéricos obligatorios: **`Graph<V, E>`** y **colas de prioridad** (`PriorityQueue` en Dijkstra/A*; `Request`
+  define el orden `(timestamp, processId)` de Ricart‑Agrawala; la cola de eventos de `events` está pendiente).
 - Capa distribuida: **Reloj de Lamport** + **Ricart‑Agrawala** para el cruce de intersecciones.
 
 ---
@@ -32,7 +32,8 @@ comportamientos, desarrollada para el curso de **Tecnologia de Objetos** (UNSA).
 | JavaFX | **21.0.x** (`javafx-controls`) |
 | Build | Maven 3.9+ con `javafx-maven-plugin` 0.0.8 |
 | JSON | Gson 2.11 (carga de mapas) |
-| Tests | JUnit 5 (Jupiter) |
+| Tests | JUnit 5 (Jupiter 5.11) |
+| Javadoc | `maven-javadoc-plugin` 3.11.2 (`doclint=none`, etiquetas `@implNote` y `@apiNote`) |
 
 Coordenadas Maven: `groupId=com.astra`, `artifactId=astra-traffic-simulator`.
 Clase principal: `com.astra.app.AstraApp` (proyecto modular, `module com.astra`).
@@ -49,6 +50,7 @@ mvn javafx:run           # ejecutar la aplicación
 mvn test                 # tests unitarios
 mvn clean package        # empaquetar
 mvn -Dtest=DijkstraTest test   # un solo test
+mvn javadoc:javadoc      # Javadoc en target/reports/apidocs
 ```
 
 Antes de cualquier commit: `mvn clean test` debe terminar en `BUILD SUCCESS`.
@@ -59,34 +61,39 @@ Antes de cualquier commit: `mvn clean test` debe terminar en `BUILD SUCCESS`.
 
 ```
 astra-traffic-simulator/
-├── pom.xml
-├── AGENTS.md / CLAUDE.md / README.md
-├── docs/report/                 # informe LaTeX
+├── pom.xml, build-exe.bat
+├── AGENTS.md / CLAUDE.md / README.md / CHANGELOG.md
+├── docs/                        # documentación (arquitectura, concurrencia, ...); docs/report/ pendiente
 └── src/
     ├── main/java/
     │   ├── module-info.java
     │   └── com/astra/
-    │       ├── app/          AstraApp, MainController
-    │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, PauseGate,
-    │       │                 SimConfig, VehicleSpawner, ParallelUpdater
-    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, NodeKind, Road, RoadGraph
+    │       ├── app/          AstraApp
+    │       ├── core/         SimulationEngine, WorldState, WorldSnapshot, ParallelUpdater, PauseGate,
+    │       │                 PauseListener, SimulationControl, SimConfig, VehicleSpawner, ParkingService,
+    │       │                 IntersectionZone, IntersectionZones, MutexMode, SimStats, StatsPoint,
+    │       │                 StatsView, LightView, MutexView, NetworkView
+    │       ├── graph/        Graph<V,E>, Edge<V>, Intersection, NodeKind, Road, RoadGraph, Heuristics
     │       │   └── algo/     Dijkstra<V,E>, AStar<V,E>
-    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, Lane,
-    │       │                 VehicleSpec, VehicleSpecs, VehicleFactory
-    │       ├── traffic/      TrafficLight, LightState, GreenState, YellowState, RedState,
-    │       │                 SmartAdaptiveState, EmergencyState, LightController
+    │       ├── model/        Vehicle (abstract), Car, Bus, Ambulance, VehicleKind, TripPurpose,
+    │       │                 VehicleSpec, VehicleSpecs, VehicleFactory, VehicleView
+    │       ├── traffic/      Axis, LightColor, LightMode, LightState, GreenState, YellowState, RedState,
+    │       │                 SmartAdaptiveState, EmergencyState, TrafficLight, LightController,
+    │       │                 LightTimings, SmartTimings, QueueSensor
     │       ├── routing/      RouteStrategy, ShortestDistanceStrategy,
     │       │                 LeastCongestedStrategy, RandomRouteStrategy,
     │       │                 RouteStrategies, RoadOccupancy, RoutingSettings
-    │       ├── command/      Command, CommandBus, PauseCmd, ResumeCmd, StepCmd,
-    │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd
-    │       ├── events/       SimEvent, EventQueue
-    │       ├── distributed/  LamportClock, Request, Message, SimulatedNetwork,
-    │       │                 RicartAgrawalaNode, IntersectionMutex
+    │       ├── command/      Command, CommandBus, Commands, PauseCmd, ResumeCmd, TogglePauseCmd, StepCmd,
+    │       │                 SetSpeedCmd, SpawnVehicleCmd, ForceLightCmd, SetLightModeCmd, SetMutexModeCmd
+    │       ├── events/       (reservado: solo package-info.java)
+    │       ├── distributed/  LamportClock, Request, Message, MessageType, MessageHandler, NetworkSettings,
+    │       │                 SimulatedNetwork, RicartAgrawalaNode, IntersectionMutex
     │       ├── parking/      ResourcePool<T>, ParkingLot, ParkingDirectory, ParkingSearchStrategy,
-    │       │                 NearestAlternative/WaitAtEntrance/GiveUpStrategy, ParkingSearchPolicy
-    │       ├── view/         CityRenderer, ControlPanel, StatsPanel
-    │       └── util/         MapLoader, SimLogger
+    │       │                 NearestAlternative/WaitAtEntrance/GiveUpStrategy, ParkingSearchPolicy,
+    │       │                 SearchDecision, ParkingSettings
+    │       ├── view/         CityRenderer, ControlPanel, StatsPanel, CityPainter, SignalPainter,
+    │       │                 VehiclePainter, ViewTransform
+    │       └── util/         MapLoader, MapFormatException, SimLogger, LogSettings
     ├── main/resources/com/astra/
     │   ├── maps/city-3x3.json      (mapa original; lo usan los tests)
     │   ├── maps/city-3x3-v2.json   (mapa por defecto: gateways y playas)
@@ -98,11 +105,14 @@ astra-traffic-simulator/
 Reglas de dependencia entre paquetes:
 
 - `view` y `app` pueden depender de todo; **nada depende de `view` ni de `app`**.
-- `core`, `model`, `traffic`, `routing`, `graph`, `distributed` **no importan `javafx.*`**
-  (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
+- `core`, `model`, `traffic`, `routing`, `graph`, `parking`, `distributed`, `command` y `util` **no importan
+  `javafx.*`** (excepción: ninguna). Esto permite ejecutar y testear el motor sin interfaz gráfica.
 - `graph` no conoce `model` ni `traffic`: es genérico.
 - `model` solo depende de `graph` y `routing`.
 - `parking` depende de `graph` y `model`, nunca de `core`: recibe sus parámetros por `ParkingSettings`.
+- `traffic` y `distributed` solo dependen de `graph` y `util` (`SimLogger`). `core` y `command` se usan entre sí:
+  el motor drena el `CommandBus` y cada `Command` recibe el `SimulationEngine`.
+- `module-info.java` solo abre `com.astra.util` a Gson (los DTO del mapa son `record` privados de `MapLoader`).
 
 ---
 
@@ -113,7 +123,7 @@ Reglas de dependencia entre paquetes:
 | JavaFX Application Thread | UI, `AnimationTimer`, dibujar el snapshot | Nodos JavaFX, `CommandBus.submit()` |
 | `astra-engine` | Bucle de simulación (tick fijo, por defecto 50 ms) | `WorldState` (dueño exclusivo) |
 | `astra-worker-N` (pool) | Actualizar vehículos en paralelo dentro de un tick | Su vehículo + `Semaphore` de intersección |
-| `astra-lights` (`ScheduledExecutorService`) | Transiciones de los semáforos | Estado propio del `TrafficLight` |
+| `astra-lights-1`, `astra-lights-2` (`ScheduledExecutorService` de 2 hilos) | Transiciones de los semáforos | Estado propio del `TrafficLight` |
 | `astra-net` (`ScheduledExecutorService`, 1 hilo) | Entregar los mensajes de `SimulatedNetwork` | Lo que toque cada `MessageHandler` (corren todos aquí) |
 | `astra-logger` | Escribir en consola y archivo las líneas de `SimLogger` | Su cola y el archivo de log |
 
@@ -145,37 +155,65 @@ Reglas:
 // State: un semáforo por intersección que alterna dos ejes (NS y EW).
 // Ciclo: GreenState(NS) → YellowState(NS) → RedState(EW) → GreenState(EW) → YellowState(EW)
 //        → RedState(NS) → …   (RedState(x) = todo en rojo; después se pone en verde x)
-public enum Axis { NS, EW; Axis opposite(); static Axis of(Road road); }
+public enum Axis { NS, EW; Axis opposite(); static Axis of(Road road); }   // a 45° cuenta como EW
+public enum LightColor { GREEN, YELLOW, RED }
+public enum LightMode { FIXED, SMART }
 public interface LightTimings { Duration greenSeconds(); Duration yellowSeconds(); Duration allRedSeconds();
                                 Duration emergencyMaxSeconds(); }
+public interface SmartTimings { int smartQueueThreshold(); Duration smartExtensionStepSeconds();
+                                Duration smartMaxExtensionSeconds(); SmartTimings NEVER_EXTEND = ...; }
+public interface QueueSensor { int queueLength(Intersection at, Axis axis); QueueSensor NONE = ...; }
 // Emergencia: TrafficLight.preempt(axis, id) → EmergencyState(axis) (axis verde, el otro rojo) hasta que el
 // último vehículo llama a release(id) → YellowState(axis) → ciclo normal.
+// SMART: con LightMode.SMART, TrafficLight cambia cada GreenState nuevo por SmartAdaptiveState(axis, at, sensor,
+// timings, 0); su next() extiende (extensionsUsed + 1) o pasa a YellowState(axis).
 public interface LightState {
     LightColor colorFor(Axis axis);
     Duration duration(LightTimings timings);   // SimConfig implementa LightTimings
     LightState next();
     default boolean canPass(Axis axis) { return colorFor(axis) == LightColor.GREEN; }
-    String name();                              // para logs y HUD, p. ej. "GREEN(NS)"
+    String name();                              // para logs, p. ej. "GREEN(NS)", "SMART-NS+1", "EMERGENCY-EW"
 }
 
 // Strategy
 public interface RouteStrategy {
-    List<Road> route(Graph<Intersection, Road> graph, Intersection from, Intersection to);
+    List<Road> route(Graph<Intersection, Road> g, Intersection from, Intersection to);
     String name();                              // "SHORTEST", "LEAST_CONGESTED", "RANDOM"
     default boolean isAdaptive() { return false; }   // true = recalcula en cada intersección
 }
 public interface RoutingSettings { double congestionFactor(); double randomJitter(); }
+public interface ParkingSearchStrategy {
+    SearchDecision onFull(Vehicle v, ParkingLot full, ParkingDirectory dir);
+    String name();                              // "NEAREST_ALTERNATIVE", "WAIT_AT_ENTRANCE", "GIVE_UP"
+    default void forget(String vehicleId) { }
+}
+public sealed interface SearchDecision { record Reroute(ParkingLot target); record Wait(double seconds);
+                                         record GiveUp(Intersection gateway); }
 
 // Command
 public interface Command {
-    void execute(SimulationEngine engine);
+    void execute(SimulationEngine engine);     // en astra-engine, al inicio del tick
+    default String describe() { return getClass().getSimpleName(); }   // historial y logs
 }
 
 // Genéricos
-public class Graph<V, E extends Edge<V>> { ... }
+public class Graph<V, E extends Edge<V>> {
+    boolean addVertex(V v); void addEdge(E e); boolean containsVertex(V v); List<E> outgoing(V v);
+    Set<V> vertices(); List<E> edges(); int vertexCount(); int edgeCount();
+}
 public interface Edge<V> { V from(); V to(); double weight(); }
-public class Dijkstra<V, E extends Edge<V>> {
-    public List<E> shortestPath(Graph<V, E> g, V src, V dst, ToDoubleFunction<E> weight);
+public final class Dijkstra<V, E extends Edge<V>> {
+    public List<E> shortestPath(Graph<V, E> g, V src, V dst);
+    public List<E> shortestPath(Graph<V, E> g, V src, V dst, ToDoubleFunction<? super E> weight);
+}
+public final class AStar<V, E extends Edge<V>> {
+    public List<E> shortestPath(Graph<V, E> g, V src, V dst, ToDoubleFunction<? super E> weight,
+                                ToDoubleBiFunction<? super V, ? super V> heuristic);
+    public Result<E> search(...);               // record Result<E>(List<E> path, int expanded)
+}
+public final class ResourcePool<T> {
+    OptionalInt tryAcquire(T item); void release(T item); int available(); int capacity();
+    List<Optional<T>> slots();
 }
 ```
 
@@ -195,17 +233,28 @@ public class Dijkstra<V, E extends Edge<V>> {
 
 ## 7. Capa distribuida
 
-- `LamportClock` es un reloj **por proceso**: `tick(action)`, `send(action)` y `receive(remoteTs, action)`
-  (`max(clock, remoteTs) + 1`), atómicos con un `ReentrantLock`; log `[LAMPORT N] PROCESS -> ACTION`.
-- Los procesos se comunican **solo por mensajes** (`Message` REQUEST/REPLY) a través de `SimulatedNetwork`,
-  con latencia aleatoria y sin orden FIFO. Todos los handlers corren en el hilo `astra-net`.
-- `RicartAgrawalaNode` implementa Ricart‑Agrawala (1981) sin estado compartido: pide la sección con un REQUEST
-  a cada par y entra al recibir los N−1 REPLY; difiere su respuesta si está dentro (HELD) o si su propio
-  pedido es anterior según `Request` (`(timestamp, processId)`). Cada entrada cuesta 2(N−1) mensajes.
+- `LamportClock(processId)` es un reloj **por proceso**: `tick(action)`, `send(action)` y
+  `receive(remoteTs, action)` (`max(clock, remoteTs) + 1`), atómicos con un `ReentrantLock`; `current()` lo lee.
+  Cada evento se registra dentro del lock como `[LAMPORT N] PROCESS -> ACTION`.
+- Los procesos se comunican **solo por mensajes**: `Message(type, from, to, timestamp, requestId)` con
+  `MessageType` REQUEST o REPLY, a través de `SimulatedNetwork` (`register`, `send`, `start`, `stop`). La latencia
+  es aleatoria entre `distributed.latencyMinMillis` y `distributed.latencyMaxMillis` (ms reales, semilla
+  `distributed.seed`) y no hay orden FIFO. Todos los `MessageHandler` corren en el hilo `astra-net`. En pausa
+  (`onPause`/`onResume`) los mensajes se retienen y se entregan al reanudar.
+- `RicartAgrawalaNode.join(processId, peers, network)` implementa Ricart‑Agrawala (1981) sin estado compartido,
+  con estados `RELEASED`, `WANTED` y `HELD`: `requestCS(requestId)` envía un REQUEST a cada par y entra al recibir
+  los N−1 REPLY; difiere su respuesta si está dentro (HELD) o si su propio pedido es anterior según `Request`
+  (`(timestamp, processId)`); `releaseCS()` responde a los diferidos. Sin pares entra directamente. Cada entrada
+  cuesta 2(N−1) mensajes. El callback `setOnEnter` corre fuera del lock en el hilo que completó la entrada.
   Log: `[RICART] <proc> requested access at 17`, `ENTERED critical section`, `released critical section`.
-- `IntersectionMutex`: un grupo RA por intersección; cada **vía entrante** es un proceso
-  (`"<intersectionId>/<roadId>"`) con una cola FIFO de vehículos, y solo el primero compite por la zona central.
-  API no bloqueante para el motor: `enqueue`, `isGranted`, `release`, `cancel`.
+- `IntersectionMutex`: un grupo RA por cada nodo con vías entrantes (`IntersectionMutex.forGraph`); cada
+  **vía entrante** es un proceso (`"<intersectionId>/<roadId>"`) con una cola FIFO de vehículos, y solo el primero
+  compite por la zona central. API no bloqueante para el motor: `enqueue(road, vehicleId)`, `isGranted`,
+  `release`, `cancel`; `holder()` y `waiting()` alimentan el `MutexView` del snapshot. Orden de bloqueo: el lock
+  del mutex y después el del nodo.
+- Con `MutexMode.RICART_AGRAWALA`, `WorldState` encola al vehículo una sola vez cuando ya podría cruzar, lo deja
+  entrar solo con la sección y el permiso de la zona, lo saca de la cola si su luz deja de permitirle cruzar y le
+  hace soltar la sección tras `distributed.grantTimeoutTicks` sin entrar. Al salir del box llama a `release`.
 - El formato de logs debe mantenerse estable: se usa como evidencia en el informe.
 
 ---
@@ -299,7 +348,7 @@ log.level=INFO
 - `routing.congestionFactor`: penalización de `LeastCongestedStrategy`; el peso de una vía es
   `length * (1 + congestionFactor * ocupación)`, con ocupación entre 0 y 1.
 - `routing.randomJitter`: variación máxima de `RandomRouteStrategy`; el peso de una vía es
-  `length * (1 + U[0,1) * randomJitter)`, sorteado una vez por cálculo de ruta.
+  `length * (1 + U[0,1) * randomJitter)`, sorteado una vez por vía en cada cálculo de ruta.
 - `emergency.preemptDistance`: distancia al centro de la intersección (px) desde la que un vehículo con
   prioridad de emergencia pone su semáforo en verde (`EmergencyState`) en el eje por donde llega. Lo libera
   al salir del box; sigue necesitando reservar la zona.

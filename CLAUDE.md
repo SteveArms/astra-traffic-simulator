@@ -59,8 +59,8 @@ module com.astra {
     requires com.google.gson;
 
     exports com.astra.app;
-    opens com.astra.graph to com.google.gson;   // deserialización de mapas
-    opens com.astra.util to com.google.gson;
+
+    opens com.astra.util to com.google.gson;   // los DTO del mapa son records privados de MapLoader
 }
 ```
 
@@ -71,5 +71,10 @@ module com.astra {
 - [x] Día 3 — Semáforos (State) asíncronos + `Semaphore` en intersecciones
 - [x] Día 4 — Estrategias de ruta, Bus/Ambulance, spawner + `Phaser`
 - [x] Día 5 — `CommandBus`, ControlPanel, StatsPanel, SmartAdaptiveState
-- [ ] Día 6 — Lamport + Ricart‑Agrawala, `SimLogger`, tests de estrés
+- [x] Día 6 — Lamport + Ricart‑Agrawala, `SimLogger`, tests de estrés
+- [x] Mejora `city-upgrade` — mapa v2 con gateways y playas, paquete `parking`, nueva vista
 - [ ] Día 7 — Informe LaTeX, capturas, README, release v1.0.0
+  - [x] README, `docs/`, CHANGELOG y Javadoc (`mvn javadoc:javadoc`)
+  - [ ] Informe LaTeX en `docs/report/` y evidencias en `docs/report/evidence/`
+  - [ ] Capturas (`docs/img/astra-main.png`)
+  - [ ] Release v1.0.0
