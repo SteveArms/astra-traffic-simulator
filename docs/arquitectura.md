@@ -22,50 +22,62 @@ El diagrama muestra los `import` reales entre paquetes de `src/main/java`.
 
 ```mermaid
 flowchart TD
-    app --> view
-    app --> core
-    app --> command
-    app --> distributed
-    app --> traffic
-    app --> graph
-    app --> util
-    view --> core
-    view --> command
-    view --> model
-    view --> routing
-    view --> traffic
-    view --> graph
-    view --> util
-    command --> core
-    command --> model
-    command --> routing
-    command --> traffic
-    command --> graph
-    command --> util
-    core --> command
-    core --> distributed
-    core --> parking
-    core --> model
-    core --> routing
-    core --> traffic
-    core --> graph
-    core --> util
-    parking --> model
-    parking --> graph
-    parking --> algo["graph.algo"]
-    model --> routing
-    model --> graph
-    routing --> algo
-    routing --> graph
-    traffic --> graph
-    traffic --> util
-    distributed --> graph
-    distributed --> util
-    util --> graph
-    algo --> graph
+    p_app["app"]
+    p_view["view"]
+    p_core["core"]
+    p_command["command"]
+    p_distributed["distributed"]
+    p_traffic["traffic"]
+    p_graph["graph"]
+    p_util["util"]
+    p_model["model"]
+    p_routing["routing"]
+    p_parking["parking"]
+    p_algo["graph.algo"]
+    p_app --> p_view
+    p_app --> p_core
+    p_app --> p_command
+    p_app --> p_distributed
+    p_app --> p_traffic
+    p_app --> p_graph
+    p_app --> p_util
+    p_view --> p_core
+    p_view --> p_command
+    p_view --> p_model
+    p_view --> p_routing
+    p_view --> p_traffic
+    p_view --> p_graph
+    p_view --> p_util
+    p_command --> p_core
+    p_command --> p_model
+    p_command --> p_routing
+    p_command --> p_traffic
+    p_command --> p_graph
+    p_command --> p_util
+    p_core --> p_command
+    p_core --> p_distributed
+    p_core --> p_parking
+    p_core --> p_model
+    p_core --> p_routing
+    p_core --> p_traffic
+    p_core --> p_graph
+    p_core --> p_util
+    p_parking --> p_model
+    p_parking --> p_graph
+    p_parking --> p_algo
+    p_model --> p_routing
+    p_model --> p_graph
+    p_routing --> p_algo
+    p_routing --> p_graph
+    p_traffic --> p_graph
+    p_traffic --> p_util
+    p_distributed --> p_graph
+    p_distributed --> p_util
+    p_util --> p_graph
+    p_algo --> p_graph
     javafx(["javafx.*"])
-    app -.-> javafx
-    view -.-> javafx
+    p_app -.-> javafx
+    p_view -.-> javafx
 ```
 
 Reglas que cumple el código:
