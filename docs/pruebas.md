@@ -20,16 +20,17 @@ proyecto sea modular. Los informes quedan en `target/surefire-reports/`.
 
 ## Resultado de la verificación
 
-Ejecución de `mvn clean test` sobre la rama `docs/full-documentation` antes de escribir esta
-documentación (JDK 26.0.1 con `--release 21`, Maven 3.9.9):
+Última ejecución de `mvn clean test` sobre la rama `docs/full-documentation`, ya con los commits de
+`feature/parked-cars` (JDK 26.0.1 con `--release 21`, Maven 3.9.9):
 
 ```text
-Tests run: 387, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 391, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
-Total time: 40.014 s
+Total time: 56.979 s
 ```
 
-Son 49 clases de test. `ManualScheduler` y `TestLights` (en `traffic`) son ayudantes, no tests.
+Antes de esos commits, la misma suite tenía 387 tests en 49 clases, también sin fallos. Ahora son 50
+clases de test. `ManualScheduler` y `TestLights` (en `traffic`) son ayudantes, no tests.
 
 | Paquete | Clases | Tests |
 | --- | --- | --- |
@@ -43,8 +44,8 @@ Son 49 clases de test. `ManualScheduler` y `TestLights` (en `traffic`) son ayuda
 | `routing` | 5 | 17 |
 | `traffic` | 6 | 40 |
 | `util` | 2 | 23 |
-| `view` | 1 | 3 |
-| **Total** | **49** | **387** |
+| `view` | 2 | 7 |
+| **Total** | **50** | **391** |
 
 ## Qué verifica cada clase
 
@@ -66,7 +67,7 @@ Son 49 clases de test. `ManualScheduler` y `TestLights` (en `traffic`) son ayuda
 | `IntersectionZoneTest` | 5 | El tercer vehículo espera, entrar dos veces no toma otro permiso, salir dos veces no pasa la capacidad, contención con varios hilos y `releaseAll` |
 | `LightPauseTest` | 3 | Un semáforo en pausa conserva el tiempo que le falta, `preempt` en pausa no programa nada y la velocidad ×2 acorta a la mitad la fase siguiente |
 | `ParallelUpdaterTest` | 8 | Cada índice se planifica y se mueve una vez, todos los PLAN terminan antes de cualquier MOVE, hilos con nombre, fallos en PLAN y MOVE llegan al motor sin colgarse, timeout con el nombre de la fase y `shutdown` |
-| `ParkingIntegrationTest` | 4 | Viajes con estacionamiento en el mapa v2 con el motor en paralelo (ver abajo) |
+| `ParkingIntegrationTest` | 4 | Viajes con estacionamiento en el mapa v2 con el motor en paralelo, y que el `ParkingView` del snapshot muestre en cada cajón al mismo auto que ocupa la playa (ver abajo) |
 | `PauseGateTest` | 5 | `awaitResumed` con reanudación, timeout y sin pausa; los listeners se llaman una vez por cambio y fuera del lock |
 | `QueueSensorTest` | 2 | Las colas se cuentan por eje y solo dentro de `smart.queueRadius` |
 | `SimConfigTest` | 79 | Lectura del archivo real, defaults, cada tipo de validación (con tests parametrizados por clave), pesos, `engine.workers=0`, latencias, modo de exclusión, log y estacionamiento |
@@ -140,6 +141,7 @@ Son 49 clases de test. `ManualScheduler` y `TestLights` (en `traffic`) son ayuda
 | --- | --- | --- |
 | `MapLoaderTest` | 18 | El mapa real y el viejo cargan, `kind`, `capacity`, `bounds`, `length` y todas las validaciones de [Mapas](mapas.md#validaciones-de-maploader) |
 | `SimLoggerTest` | 5 | Formato exacto por categoría, filtro por nivel, líneas completas con escritores concurrentes, `shutdown` vacía la cola y crea la carpeta del log |
+| `LotGeometryTest` | 4 | Un cajón por plaza repartido en dos filas, el orden de los cajones desde la entrada igual al del `ResourcePool`, cada cajón dentro de la playa y mirando al pasillo, y el tamaño de la playa según su capacidad |
 | `ViewTransformTest` | 3 | Encaja el mundo con margen y centrado, la inversa deshace la transformación y un canvas degenerado usa la identidad |
 
 ## Tests de concurrencia y estrés
@@ -152,7 +154,7 @@ Todos llevan `@Timeout` para que un deadlock haga fallar el test en lugar de col
 | `EngineStressTest.parallelThroughputMatchesSequentialWithin15Percent` | La misma carga en paralelo y en secuencial | Los vehículos que salen difieren menos de un 15 % |
 | `DistributedCrossingTest.ricartAgrawalaKeepsOneAccessPerBoxWithoutDeadlock` | La malla de 6 × 4 con 150 vehículos, 3000 ticks, en modo `RICART_AGRAWALA` y con `astra-net` real | Quien cruza tiene la sección; como máximo un acceso por intersección cruza con ella; hubo mensajes y siguió habiendo llegadas en el último tercio (sin deadlock) |
 | `DistributedCrossingTest.switchingModesLiveLeavesNoVehicleStuck` | Cambiar a `SEMAPHORE` con vehículos esperando en Ricart‑Agrawala | No queda nadie encolado ni con la sección, y los que esperaban terminan de cruzar |
-| `ParkingIntegrationTest` | Mapa v2 con el motor en paralelo, 5000 ticks | Ninguna playa supera su capacidad, `entradas − salidas = ocupados`, nadie está estacionado y circulando a la vez, solo autos con salida por un gateway, rechazos contados y misma semilla con el mismo resultado en secuencial |
+| `ParkingIntegrationTest` | Mapa v2 con el motor en paralelo, 5000 ticks | Ninguna playa supera su capacidad, `entradas − salidas = ocupados`, el snapshot coincide con los cajones, nadie está estacionado y circulando a la vez, solo autos con salida por un gateway, rechazos contados y misma semilla con el mismo resultado en secuencial |
 | `RicartAgrawalaTest.fourNodesNeverOverlapAllFinishAndPayTwoNMinusOneMessages` | 4 nodos, 200 entradas cada uno, red real | Nunca hay más de un nodo en `HELD`, nadie muere de hambre, todos terminan en `RELEASED` y se enviaron exactamente `4 × 200 × 2 × 3` mensajes |
 | `LamportClockTest.concurrentTicksAreDistinctAndConsecutive` | 16 hilos con 1000 `tick` cada uno sobre el mismo reloj | Los valores son distintos y consecutivos (monotonía) |
 | `IntersectionZoneTest.occupancyNeverExceedsCapacityUnderContention`, `ResourcePoolTest.twentyThreadsNeverExceedCapacity` | Muchos hilos compitiendo con `tryAcquire` | La ocupación nunca supera la capacidad |

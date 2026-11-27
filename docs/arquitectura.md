@@ -83,7 +83,7 @@ flowchart TD
 Reglas que cumple el código:
 
 - **Nada de `javafx.*` fuera de `app` y `view`.** `core`, `model`, `traffic`, `routing`, `graph`,
-  `parking`, `distributed`, `command` y `util` no importan JavaFX. Por eso los 387 tests corren sin
+  `parking`, `distributed`, `command` y `util` no importan JavaFX. Por eso los 391 tests corren sin
   interfaz gráfica.
 - **Nada depende de `view` ni de `app`.**
 - `graph` no conoce `model` ni `traffic`: es genérico.

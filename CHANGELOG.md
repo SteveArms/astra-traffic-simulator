@@ -9,7 +9,10 @@ commit va al final.
 
 ## [Unreleased]
 
-### Documentación completa — rama `docs/full-documentation`
+### Documentación completa — rama `docs/full-documentation` (PR #13)
+
+La primera parte se integró a `main` con el PR #13. Después la rama avanzó por *fast-forward* hasta `main`
+para incluir el PR #12 y la documentación se actualizó con los autos estacionados.
 
 #### Agregado
 
@@ -32,6 +35,20 @@ commit va al final.
 - Javadoc completado por paquete, sin cambiar la lógica: `traffic` (`af2dee9`, `645fc5d`), `model`
   (`51f82d2`), `command` (`13b88b1`), `app` (`cfb8c26`), `core` (`32553fb`), `distributed` (`4736b0c`),
   `events` (`d8e19cc`), `view` (`a0c55f9`) y `util` (`f0b426b`).
+
+### Autos estacionados — rama `feature/parked-cars` (PR #12)
+
+#### Agregado
+
+- El snapshot publica cada playa como `ParkingView`, con sus autos y el cajón que ocupan (`2dfb835`).
+- Los autos estacionados se dibujan en su cajón, con su color de la calle y el frente hacia el pasillo; una
+  playa llena o cerrada lleva un contorno naranja y, con **Mostrar etiquetas**, muestra sus cajones libres
+  (`b687161`).
+
+#### Cambiado
+
+- La geometría de las playas pasa a `LotGeometry`, compartida por la capa estática y la dinámica
+  (`8c1220d`).
 
 ### Mejora de la ciudad — rama `feature/city-upgrade` (PR #11, 2026-11-25)
 

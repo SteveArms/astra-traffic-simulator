@@ -27,7 +27,7 @@ buses y ambulancias que eligen su ruta de distintas formas. Lo desarrollamos par
 - **Interfaz JavaFX** que solo dibuja *snapshots* inmutables; cada acción del usuario es un `Command`.
 - **Estadísticas en vivo:** espera y viaje promedio, throughput, colas y dos gráficas.
 - **Logs de evidencia** `[LAMPORT N] PROCESS -> ACTION` y `[RICART] ...` en `logs/astra.log`.
-- **387 tests** JUnit 5 que corren sin interfaz gráfica, incluidas pruebas de estrés con 150 vehículos.
+- **391 tests** JUnit 5 que corren sin interfaz gráfica, incluidas pruebas de estrés con 150 vehículos.
 
 ## Requisitos
 
@@ -50,7 +50,7 @@ Ejecuta todos los comandos desde la raíz del repositorio, donde está `pom.xml`
 ```bash
 mvn clean compile                # compilar
 mvn javafx:run                   # ejecutar la aplicación
-mvn test                         # ejecutar los 387 tests
+mvn test                         # ejecutar los 391 tests
 mvn -Dtest=DijkstraTest test     # ejecutar una sola clase de test
 mvn javadoc:javadoc              # generar el Javadoc en target/reports/apidocs/
 ```
@@ -156,7 +156,7 @@ astra-traffic-simulator/
     │   ├── config.properties
     │   ├── css/astra.css
     │   └── maps/         city-3x3-v2.json (por defecto), city-3x3.json (tests)
-    └── test/java/com/astra/      49 clases de test, en espejo de los paquetes
+    └── test/java/com/astra/      50 clases de test, en espejo de los paquetes
 ```
 
 ## Pendiente

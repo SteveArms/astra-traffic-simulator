@@ -148,7 +148,8 @@ libres y un arreglo de slots, protegido por su propio monitor, recuerda qué veh
 - `release(item)` es idempotente.
 - El semáforo y los slots siempre coinciden: con un permiso hay un slot libre (si no, lanza
   `IllegalStateException`).
-- En la simulación lo usa solo `astra-engine` en la fase C; `ResourcePoolTest.twentyThreadsNeverExceedCapacity`
+- En la simulación lo usa solo `astra-engine`: en la fase C y al leer los slots para armar los
+  `ParkingView` del snapshot; `ResourcePoolTest.twentyThreadsNeverExceedCapacity`
   lo prueba con 20 hilos.
 
 ## Cómo se evitan los deadlocks
