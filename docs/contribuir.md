@@ -25,8 +25,14 @@ gitGraph
     commit id: "mapa v2 y playas"
     checkout main
     merge feature/city-upgrade id: "PR #11"
+    branch feature/parked-cars
+    commit id: "autos estacionados"
+    checkout main
+    merge feature/parked-cars id: "PR #12"
     branch docs/full-documentation
     commit id: "documentación"
+    checkout main
+    merge docs/full-documentation id: "PR #13"
 ```
 
 (El diagrama resume: entre el PR #2 y el #10 hubo otros siete PR con el mismo esquema).
@@ -50,9 +56,11 @@ gitGraph
 | #8, #9 | `feature/day5-commands-ui` | Día 5: `CommandBus`, comandos, pausa, SMART, estadísticas y paneles |
 | #10 | `feature/day6-distributed` | Día 6: `SimLogger`, Lamport, red simulada, Ricart‑Agrawala y su integración |
 | #11 | `feature/city-upgrade` | Mapa v2 con gateways y playas, nueva vista y paquete `parking` |
+| #12 | `feature/parked-cars` | Autos estacionados en el snapshot (`ParkingView`) y dibujados en su cajón (`LotGeometry`) |
+| #13 | `docs/full-documentation` | Documentación completa: `docs/`, README, CHANGELOG y Javadoc |
 
-La rama `feature/parked-cars` existe en el remoto con tres commits que todavía no están en `main`
-(dibujar los autos estacionados); su contenido no está documentado aquí.
+Después del PR #13, `docs/full-documentation` se actualizó con un *fast-forward* a `main` para incluir
+el PR #12 y seguir documentando sobre el código actual.
 
 ### Pasos
 
