@@ -3,6 +3,10 @@ package com.astra.traffic;
 import java.time.Duration;
 import java.util.Objects;
 
+/**
+ * Todo rojo entre el amarillo de un eje y el verde de {@code nextGreen}: deja terminar de cruzar a quien ya entró.
+ * Dura {@code lights.allRedSeconds}.
+ */
 public record RedState(Axis nextGreen) implements LightState {
 
     public RedState {

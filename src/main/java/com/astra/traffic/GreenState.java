@@ -3,6 +3,7 @@ package com.astra.traffic;
 import java.time.Duration;
 import java.util.Objects;
 
+/** Verde para {@code active} y rojo para el otro eje; dura {@code lights.greenSeconds} y sigue el amarillo. */
 public record GreenState(Axis active) implements LightState {
 
     public GreenState {
