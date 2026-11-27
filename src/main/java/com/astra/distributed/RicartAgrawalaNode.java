@@ -60,7 +60,11 @@ public final class RicartAgrawalaNode implements MessageHandler {
         return node;
     }
 
-    /** Acción que se ejecuta cada vez que el nodo entra a la sección crítica, fuera del lock. */
+    /**
+     * Acción que se ejecuta cada vez que el nodo entra a la sección crítica, fuera del lock.
+     *
+     * @implNote Called once by the owner right after {@link #join}, before any request.
+     */
     public void setOnEnter(Runnable onEnter) {
         this.onEnter = Objects.requireNonNull(onEnter, "onEnter");
     }
